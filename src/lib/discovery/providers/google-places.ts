@@ -73,8 +73,13 @@ export async function searchGooglePlaces(params: {
       },
     );
     for (const place of data.places ?? []) {
-      const b = parseGooglePlace(place);
-      if (b) out.push(b);
+      // One malformed record must not lose the rest of the results.
+      try {
+        const b = parseGooglePlace(place);
+        if (b) out.push(b);
+      } catch (e) {
+        console.warn(`[discovery] Google Places: registro ${place.id ?? "?"} ignorado:`, e);
+      }
     }
     pageToken = data.nextPageToken;
   } while (pageToken && out.length < target);

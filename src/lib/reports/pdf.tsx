@@ -62,7 +62,7 @@ const s = StyleSheet.create({
 function Section({ n, title, children, breakable = true }: { n: number; title: string; children: ReactNode; breakable?: boolean }) {
   return (
     <View style={s.section} wrap={breakable}>
-      <View style={s.h2Row} minPresenceAhead={60}>
+      <View style={s.h2Row} minPresenceAhead={140}>
         <Text style={s.h2Num}>{String(n).padStart(2, "0")}</Text>
         <Text style={s.h2}>{title}</Text>
       </View>
@@ -198,7 +198,7 @@ export function ReportPdf({ content }: { content: ReportContent }) {
           <Section n={next()} title="Sistemas que podríamos implementar">
             {content.systems.map((sys) => (
               <View key={sys.label} style={s.factRow} wrap={false}>
-                <Text style={[s.factLabel, { width: 150, color: C.ink, fontFamily: "Helvetica-Bold" }]}>{sys.label}</Text>
+                <Text style={[s.factLabel, { width: 160, flexShrink: 0, paddingRight: 12, color: C.ink, fontFamily: "Helvetica-Bold" }]}>{sys.label}</Text>
                 <View style={s.factValue}>
                   <Text>{sys.description}</Text>
                   <Text style={s.small}>Resuelve: {sys.addresses.join(" · ")}</Text>

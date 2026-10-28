@@ -57,6 +57,14 @@ export interface PageExtract {
 
 const MAX_TEXT = 40_000;
 
+// Registrar parking pages render with JavaScript, so their text is empty.
+const PARKING_LANDER = /(parking-lander|LANDER_SYSTEM|ap\s*:\s*["']parking["']|sedoparking\.com|parkingcrew\.net|bodis\.com)/i;
+
+function parkingLander(html: string): string | null {
+  const m = PARKING_LANDER.exec(html);
+  return m ? `Página de aparcamiento de dominios (código «${m[1]}»)` : null;
+}
+
 const clean = (s: string | undefined | null) => (s ?? "").replace(/\s+/g, " ").trim();
 
 function absolute(href: string | undefined, base: string): string | null {
@@ -195,7 +203,10 @@ function extractForms($: CheerioAPI, pageUrl: string, pageHasCaptcha: boolean): 
     else if (
       types.includes("date") ||
       types.includes("datetime-local") ||
-      names.some((n) => /(cita|reserva|appointment|booking|fecha|date|hora)/.test(n) && !/(nacimiento|birth)/.test(n))
+      // Visible labels count too: form builders often name fields "text-123".
+      [...names, ...labels.map((l) => l.toLowerCase())].some(
+        (n) => /(cita|reserva|appointment|booking|fecha|date|\bhora\b)/.test(n) && !/(nacimiento|birth)/.test(n),
+      )
     )
       purpose = "booking";
     else if (hasEmail || hasPhone || hasMessage) purpose = "contact";
@@ -322,7 +333,9 @@ export function extractPage(html: string, pageUrl: string): PageExtract {
         socials.push({ platform, url: href.split("?")[0]! });
       }
       if (sameSite(href, pageUrl)) internalLinks.push({ href: href.split("#")[0]!, text });
-      else if (RE.booking.test(text) || detectVendors(href).some((v) => v.vendor.group === "booking")) {
+      // A "Pide cita" button that opens WhatsApp or a social profile is a
+      // messaging channel, not online booking (it is counted as WhatsApp).
+      else if (!platform && (RE.booking.test(text) || detectVendors(href).some((v) => v.vendor.group === "booking"))) {
         bookingLinks.push({ href, text: text || href });
       }
     } else if (lowerHref.startsWith("whatsapp://")) {
@@ -405,8 +418,11 @@ export function extractPage(html: string, pageUrl: string): PageExtract {
       hasFaq: RE.faq.test(text),
       copyrightYear: years.length ? Math.max(...years) : null,
       underConstruction: firstMatch(RE.underConstruction),
-      parked: firstMatch(RE.parked),
-      phoneOnlyHints: uniq([...text.matchAll(RE.phoneOnly)].map((m) => clean(m[0]))).slice(0, 3),
+      parked: firstMatch(RE.parked) ?? parkingLander(html),
+      // "Ante una urgencia, llámenos" is about emergencies, not how appointments are booked.
+      phoneOnlyHints: uniq([...text.matchAll(RE.phoneOnly)].map((m) => clean(m[0])))
+        .filter((h) => !/urgenc|emergenc/i.test(h))
+        .slice(0, 3),
       leadMagnets: uniq([...text.matchAll(RE.leadMagnet)].map((m) => clean(m[0]).toLowerCase())).slice(0, 5),
       newsletter: forms.some((f) => f.purpose === "newsletter") || RE.newsletter.test(text),
       legal: {

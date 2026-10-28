@@ -45,6 +45,12 @@ function writeSummary(
 
   if (!f.hasOwnSite) {
     parts.push(`${subject} no tiene web propia registrada; el análisis se basa en los datos públicos de su ficha.`);
+  } else if (s.website.mismatch) {
+    parts.push(
+      `${subject} tiene registrada la web ${f.siteLabel}, pero parece de otro negocio, así que su contenido no se ha usado. Conviene confirmar cuál es su web real.`,
+    );
+  } else if (s.content.parked) {
+    parts.push(`${subject} tiene registrada la web ${f.siteLabel}, pero el dominio muestra una página de dominio aparcado, no una web del negocio.`);
   } else if (!f.reachable) {
     parts.push(
       f.blocked

@@ -19,6 +19,8 @@ export type BusinessModel =
 export interface BusinessProfile {
   model: BusinessModel;
   label: string;
+  /** Sector as it reads inside a sentence: "En {inSector} muchos clientes…" */
+  inSector: string;
   /** Customers normally book a time slot (appointments, tables, rooms, classes) */
   bookingExpected: boolean;
   /** Customers come back (check-ups, treatments, memberships): reactivation pays off */
@@ -28,14 +30,14 @@ export interface BusinessProfile {
 }
 
 const PROFILES: Record<BusinessModel, Omit<BusinessProfile, "model">> = {
-  health: { label: "Salud / clínica", bookingExpected: true, repeatBusiness: true, economicValue: 0.9 },
-  beauty: { label: "Belleza y cuidado personal", bookingExpected: true, repeatBusiness: true, economicValue: 0.6 },
-  fitness_education: { label: "Deporte / formación", bookingExpected: true, repeatBusiness: true, economicValue: 0.6 },
-  hospitality: { label: "Hostelería y alojamiento", bookingExpected: true, repeatBusiness: true, economicValue: 0.5 },
-  professional: { label: "Servicios profesionales", bookingExpected: false, repeatBusiness: false, economicValue: 0.85 },
-  home_services: { label: "Servicios para el hogar", bookingExpected: false, repeatBusiness: false, economicValue: 0.75 },
-  retail: { label: "Comercio", bookingExpected: false, repeatBusiness: true, economicValue: 0.4 },
-  generic: { label: "Negocio local", bookingExpected: false, repeatBusiness: false, economicValue: 0.5 },
+  health: { label: "Salud / clínica", inSector: "el sector salud", bookingExpected: true, repeatBusiness: true, economicValue: 0.9 },
+  beauty: { label: "Belleza y cuidado personal", inSector: "belleza y cuidado personal", bookingExpected: true, repeatBusiness: true, economicValue: 0.6 },
+  fitness_education: { label: "Deporte / formación", inSector: "deporte y formación", bookingExpected: true, repeatBusiness: true, economicValue: 0.6 },
+  hospitality: { label: "Hostelería y alojamiento", inSector: "hostelería", bookingExpected: true, repeatBusiness: true, economicValue: 0.5 },
+  professional: { label: "Servicios profesionales", inSector: "servicios profesionales", bookingExpected: false, repeatBusiness: false, economicValue: 0.85 },
+  home_services: { label: "Servicios para el hogar", inSector: "servicios para el hogar", bookingExpected: false, repeatBusiness: false, economicValue: 0.75 },
+  retail: { label: "Comercio", inSector: "comercio", bookingExpected: false, repeatBusiness: true, economicValue: 0.4 },
+  generic: { label: "Negocio local", inSector: "un negocio local", bookingExpected: false, repeatBusiness: false, economicValue: 0.5 },
 };
 
 const RULES: [BusinessModel, RegExp][] = [

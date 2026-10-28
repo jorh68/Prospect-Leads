@@ -15,7 +15,9 @@ mensajes de contacto (email, LinkedIn, WhatsApp) e informe comercial en PDF →
 ## Requisitos
 
 - Node.js 20.19 o superior (probado con 22).
-- Acceso a internet para las fuentes de datos.
+- Acceso a internet para las fuentes de datos. Detrás de un proxy corporativo,
+  arranca con `HTTPS_PROXY`/`HTTP_PROXY` y `NODE_USE_ENV_PROXY=1` (Node ≥ 22.21),
+  porque el `fetch` de Node ignora el proxy si no se activa.
 
 ## Puesta en marcha
 

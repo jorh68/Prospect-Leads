@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classifyPage, decodeCfEmail, extractPage } from "@/lib/analysis/extract";
-import { charsetOf, decodeHtml, pickSubpages } from "@/lib/analysis/crawl";
+import { charsetOf, decodeHtml, pickSubpages, softRedirectTarget } from "@/lib/analysis/crawl";
 import { detectVendors } from "@/lib/analysis/vendors";
 import { fixture } from "./helpers";
 
@@ -109,5 +109,42 @@ describe("crawl helpers", () => {
   it("decodes Cloudflare e-mail obfuscation and rejects junk", () => {
     expect(decodeCfEmail("9df4f3fbf2ddf9f8f3e9fcf1b0f8f7f8f0edf1f2b3e9f8eee9")).toBe("info@dental-ejemplo.test");
     expect(decodeCfEmail("zz")).toBeNull();
+  });
+});
+
+describe("booking links", () => {
+  it("does not count a 'Pide cita' button that opens WhatsApp as online booking", () => {
+    const html = `<html><body><h1>Clínica</h1>
+      <a href="https://api.whatsapp.com/send?phone=34600000000">Pide cita</a>
+      <a href="https://www.doctoralia.es/clinicas/ejemplo">Reservar cita</a></body></html>`;
+    const p = extractPage(html, "https://dental-ejemplo.test/");
+    expect(p.bookingLinks.map((l) => l.href)).toEqual(["https://www.doctoralia.es/clinicas/ejemplo"]);
+    expect(p.whatsappLinks).toHaveLength(1);
+  });
+});
+
+describe("real-world page shapes", () => {
+  it("classifies a form with date and time labels as a booking form", () => {
+    const html = `<form><label for="a">Nombre</label><input id="a" name="text-1">
+      <label for="b">Email</label><input id="b" type="text" name="email-2">
+      <label for="c">Fecha</label><input id="c" name="text-3"><label for="d">Hora</label><input id="d" name="text-4">
+      <button>Enviar</button></form>`;
+    expect(extractPage(html, "https://fisio-ejemplo.test/").forms[0]!.purpose).toBe("booking");
+  });
+
+  it("follows stub pages that only redirect with JavaScript or meta refresh", () => {
+    expect(softRedirectTarget(`<html><head><script>window.onload=function(){window.location.href="/lander"}</script></head></html>`)).toBe("/lander");
+    expect(softRedirectTarget(`<meta http-equiv="refresh" content="0; url=https://ejemplo.test/es/">`)).toBe("https://ejemplo.test/es/");
+    expect(softRedirectTarget(`<html><body>${"Contenido real. ".repeat(400)}<script>location.href="/x"</script></body></html>`)).toBeNull();
+  });
+
+  it("recognises a registrar parking page that has no visible text", () => {
+    const html = `<!doctype html><html><head><script>window.LANDER_SYSTEM="PW"</script><script defer src="https://img1.wsimg.com/parking-lander/static/js/main.js"></script></head><body><div id="root"></div></body></html>`;
+    expect(extractPage(html, "https://fisio-ejemplo.test/lander").hints.parked).toMatch(/aparcamiento de dominios/);
+  });
+
+  it("does not read an emergency phone line as phone-only booking", () => {
+    const html = `<p>Aunque ante una urgencia no hay que pedir una cita previa, es necesario que nos llames por teléfono.</p>`;
+    expect(extractPage(html, "https://dental-ejemplo.test/").hints.phoneOnlyHints).toEqual([]);
   });
 });

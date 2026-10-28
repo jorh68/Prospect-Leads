@@ -68,4 +68,14 @@ describe("Google Places parser", () => {
     expect(b.businessStatus).toBe("operational");
     expect(b.phone).toBe("+34910000001");
   });
+
+  it("tolerates address components without types (seen in real responses)", () => {
+    const place = {
+      ...googlePlace,
+      addressComponents: [{ longText: "Calle Falsa, 1, entresuelo" }, ...googlePlace.addressComponents],
+    };
+    const b = parseGooglePlace(place)!;
+    expect(b.city).toBe("Madrid");
+    expect(b.street).toBe("Calle Falsa, 1");
+  });
 });

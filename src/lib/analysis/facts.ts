@@ -83,7 +83,8 @@ export function deriveFacts(ctx: CompanyContext, s: AnalysisSignals): Facts {
   return {
     profile,
     hasOwnSite: s.website.provided,
-    reachable: s.website.reachable,
+    // A parked domain answers, but it is not the business's website.
+    reachable: s.website.reachable && !s.content.parked,
     blocked: s.website.blocked,
     siteLabel: displayUrl(s.website.finalUrl ?? s.website.url),
     pagesChecked: okPages.length,

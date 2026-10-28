@@ -93,6 +93,10 @@ export const analysisSignalsSchema = z.object({
     loadTimeMs: z.number().nullable(),
     pageBytes: z.number().nullable(),
     platform: vendorHitSchema.nullable(),
+    /** The URL on record is a dead inner page; the site's home page was analysed instead */
+    listedUrlError: z.object({ url: z.string(), status: z.number() }).nullable().default(null),
+    /** The site answered but does not seem to belong to this business (evidence) */
+    mismatch: z.string().nullable().default(null),
   }),
   pages: z.array(pageSignalSchema),
   content: z.object({

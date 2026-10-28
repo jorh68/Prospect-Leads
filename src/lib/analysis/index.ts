@@ -2,6 +2,7 @@ import "server-only";
 import type { Company, Job, Prisma, SocialProfile } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db";
+import { integrations } from "../env";
 import { errorMessage } from "../http";
 import { logActivity } from "../activity";
 import { SOCIAL_PLATFORMS, type SocialPlatform } from "../domain/constants";
@@ -51,6 +52,7 @@ function toContext(company: Company & { socialProfiles: SocialProfile[] }): Comp
     rating: company.rating,
     reviewCount: company.reviewCount,
     ratingSource: fs.success ? (fs.data.rating ?? fs.data.reviewCount ?? null) : null,
+    ratingProviderConfigured: integrations.googlePlaces(),
     openingHours:
       typeof hours === "string" || (Array.isArray(hours) && hours.every((h) => typeof h === "string"))
         ? (hours as string | string[])
@@ -84,6 +86,11 @@ export async function runAnalysisJob(job: Job): Promise<void> {
     if (url && isOwnWebsite(url)) {
       await setJobProgress(job.id, { step: "crawl", url });
       crawl = await crawlSite(url);
+      if (crawl.home.proxyRefused) {
+        throw new AnalysisError(
+          `La red de este servidor no permite conectar con ${extractDomain(url) ?? url} (lo bloquea un proxy), así que no se puede revisar la web. No es un fallo de la empresa: vuelve a lanzar el análisis desde una red con acceso.`,
+        );
+      }
       if (crawl.home.networkError && !(await hasInternetAccess())) {
         throw new AnalysisError(
           "El servidor no tiene acceso a internet, así que no se puede revisar la web. Vuelve a lanzar el análisis cuando haya conexión.",
@@ -103,7 +110,7 @@ export async function runAnalysisJob(job: Job): Promise<void> {
     let opportunities = result.opportunities;
     let generator: "rules" | "llm" = "rules";
     try {
-      const refined = await refineWithLlm(ctx, signals, result, crawledText(crawl));
+      const refined = await refineWithLlm(ctx, signals, result, crawledText(signals.website.mismatch ? null : crawl));
       if (refined) {
         summary = refined.summary;
         opportunities = refined.opportunities;
@@ -115,7 +122,7 @@ export async function runAnalysisJob(job: Job): Promise<void> {
     }
 
     await setJobProgress(job.id, { step: "save" });
-    await persist({ company, analysisId: analysis.id, crawl, signals, result: { ...result, summary, opportunities }, generator });
+    await persist({ company, analysisId: analysis.id, signals, result: { ...result, summary, opportunities }, generator });
     console.info(
       `[analysis] ${company.name}: ${result.score.total}/100, ${opportunities.length} oportunidad(es), ${result.findings.length} hallazgo(s) [${generator}]`,
     );
@@ -139,12 +146,11 @@ export async function runAnalysisJob(job: Job): Promise<void> {
 async function persist(params: {
   company: Company & { socialProfiles: SocialProfile[] };
   analysisId: string;
-  crawl: CrawlResult | null;
   signals: AnalysisSignals;
   result: ReturnType<typeof interpret>;
   generator: "rules" | "llm";
 }) {
-  const { company, analysisId, crawl, signals, result, generator } = params;
+  const { company, analysisId, signals, result, generator } = params;
   const companyId = company.id;
 
   // Keep the user's "dismissed" decisions across re-analyses.
@@ -237,7 +243,7 @@ async function persist(params: {
       });
     }
 
-    if (crawl?.home.html) {
+    if (signals.website.reachable) {
       const payload = {
         finalUrl: signals.website.finalUrl,
         pages: signals.pages.map((p) => ({ url: p.url, kind: p.kind, status: p.status, title: p.title })),

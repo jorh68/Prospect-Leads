@@ -32,6 +32,7 @@ export function crawlOf(pages: FetchedPage[], redirectsToHttps: boolean | null =
     extracts: pages.filter((p) => p.html).map((p) => extractPage(p.html!, p.finalUrl)),
     redirectsToHttps,
     blocked: false,
+    listedUrlError: null,
   };
 }
 
