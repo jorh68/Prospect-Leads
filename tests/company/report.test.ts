@@ -40,6 +40,11 @@ describe("buildReportContent", () => {
     ]);
   });
 
+  it("attributes the rating to its source", () => {
+    const facts = Object.fromEntries(buildReportContent(reportInput()).situation.facts.map((f) => [f.label, f.value]));
+    expect(facts["Valoración"]).toMatch(/^4,7 \/ 5 \(\d+ reseñas\) · Fuente: Google Places$/);
+  });
+
   it("states missing data instead of inventing it", () => {
     const base = reportInput();
     const content = buildReportContent({ ...base, company: { ...base.company, rating: null, reviewCount: null, email: null }, socials: [] });

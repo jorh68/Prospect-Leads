@@ -177,4 +177,26 @@ describe("analysis job", () => {
     const activity = await mod.db.activity.findFirstOrThrow({ where: { companyId: company.id } });
     expect(activity.type).toBe("analysis_failed");
   }, 30_000);
+
+  it("does not report a proxy refusal as the company's site blocking visits", async () => {
+    // HTTPS: the proxy refuses the CONNECT tunnel. HTTP: the proxy answers 403 itself.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        if (String(input).startsWith("https:")) {
+          const tunnel = new Error("Proxy response (403) !== 200 when HTTP Tunneling");
+          throw new TypeError("fetch failed", { cause: new Error("Request was cancelled.", { cause: tunnel }) });
+        }
+        return new Response("request blocked", { status: 403, headers: { "x-proxy-error": "request blocked" } });
+      }),
+    );
+    const company = await createCompany({ name: "Clínica Proxy Ejemplo", website: "https://proxy-ejemplo.test/" });
+    const job = await mod.enqueueAnalysis(company.id);
+    await expect(mod.runAnalysisJob(job!)).rejects.toThrow(/no permite conectar con proxy-ejemplo\.test/);
+
+    const c = await mod.db.company.findUniqueOrThrow({ where: { id: company.id }, include: { analyses: true, findings: true } });
+    expect(c.analysisStatus).toBe("failed");
+    expect(c.findings).toEqual([]);
+    expect(c.analyses[0]!.error).toMatch(/No es un fallo de la empresa/);
+  }, 30_000);
 });

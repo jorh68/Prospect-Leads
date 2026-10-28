@@ -29,6 +29,11 @@ export interface FetchedPage {
   error: string | null;
   /** Network-level failure (DNS, TLS, timeout…), as opposed to an HTTP answer */
   networkError: boolean;
+  /**
+   * A proxy between this server and the site refused the request (network
+   * policy, corporate proxy). Says nothing about the site itself.
+   */
+  proxyRefused?: boolean;
   /** Start of the body of an error response (to recognise anti-bot pages) */
   errorBody: string | null;
 }
@@ -107,6 +112,24 @@ async function readLimited(res: Response, maxBytes: number): Promise<Uint8Array>
   return out;
 }
 
+/** Status of a refusal by an outbound proxy (refused CONNECT tunnel), found in the error's cause chain. */
+function proxyRefusalStatus(e: unknown): number | null {
+  for (let c: unknown = e, depth = 0; c && depth < 5; c = (c as { cause?: unknown }).cause, depth++) {
+    const m = /Proxy response \((\d{3})\)/.exec((c as Error).message ?? "");
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
+/** A plain-HTTP answer written by a proxy (policy block, auth required) rather than by the site. */
+function isProxyAnswer(res: Response): boolean {
+  return res.status === 407 || res.headers.has("x-proxy-error") || res.headers.has("x-squid-error");
+}
+
+function proxyRefusedMessage(status: number) {
+  return `la red de este servidor no permite conectar con esta web (proxy, HTTP ${status})`;
+}
+
 function networkErrorMessage(e: unknown, timeoutMs: number): string {
   if (e instanceof DOMException && e.name === "TimeoutError") return `sin respuesta tras ${Math.round(timeoutMs / 1000)} s`;
   const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
@@ -147,6 +170,10 @@ export async function fetchPage(url: string, kind: PageKind, timeoutMs = CRAWL_L
         signal: AbortSignal.timeout(timeoutMs),
         cache: "no-store",
       });
+      if (isProxyAnswer(res)) {
+        await res.body?.cancel().catch(() => {});
+        return { ...base, finalUrl: current, status: null, html: null, bytes: null, loadTimeMs: null, error: proxyRefusedMessage(res.status), networkError: true, proxyRefused: true, errorBody: null };
+      }
       const location = res.headers.get("location");
       if (res.status >= 300 && res.status < 400 && location) {
         await res.body?.cancel().catch(() => {});
@@ -178,6 +205,7 @@ export async function fetchPage(url: string, kind: PageKind, timeoutMs = CRAWL_L
     return { ...base, finalUrl: current, status: null, html: null, bytes: null, loadTimeMs: null, error: "demasiadas redirecciones", networkError: false, errorBody: null };
   } catch (e) {
     const blocked = e instanceof BlockedUrlError;
+    const proxyStatus = blocked ? null : proxyRefusalStatus(e);
     return {
       ...base,
       finalUrl: current,
@@ -185,8 +213,9 @@ export async function fetchPage(url: string, kind: PageKind, timeoutMs = CRAWL_L
       html: null,
       bytes: null,
       loadTimeMs: null,
-      error: blocked ? e.message : networkErrorMessage(e, timeoutMs),
+      error: blocked ? e.message : proxyStatus ? proxyRefusedMessage(proxyStatus) : networkErrorMessage(e, timeoutMs),
       networkError: !blocked,
+      ...(proxyStatus ? { proxyRefused: true } : {}),
       errorBody: null,
     };
   }

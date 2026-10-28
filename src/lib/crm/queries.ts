@@ -292,7 +292,7 @@ export async function dashboardData() {
       where: { score: { not: null }, crmStatus: { notIn: CLOSED_STATUSES } },
       orderBy: [{ score: "desc" }, { opportunityCount: "desc" }, { name: "asc" }],
       take: 8,
-      select: { id: true, name: true, city: true, niche: true, score: true, opportunityCount: true, crmStatus: true },
+      select: { id: true, name: true, city: true, niche: true, rating: true, reviewCount: true, fieldSources: true, score: true, opportunityCount: true, crmStatus: true },
     }),
     db.company.findMany({
       where: { followUpAt: { not: null }, crmStatus: { notIn: CLOSED_STATUSES } },
@@ -318,7 +318,11 @@ export async function dashboardData() {
     problems: problems.slice(0, 8),
     services: services.slice(0, 8),
     pipeline: CRM_STATUSES.map((s) => ({ status: s, count: statusCounts.get(s) ?? 0 })),
-    priority: priorityRows.map((r) => ({ ...r, topOpportunity: top.get(r.id) ?? null })),
+    priority: priorityRows.map(({ fieldSources, ...r }) => ({
+      ...r,
+      ratingSource: (fieldSources as Record<string, string> | null)?.rating ?? null,
+      topOpportunity: top.get(r.id) ?? null,
+    })),
     upcoming,
     activity,
   };

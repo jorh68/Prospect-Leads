@@ -84,6 +84,11 @@ export async function runAnalysisJob(job: Job): Promise<void> {
     if (url && isOwnWebsite(url)) {
       await setJobProgress(job.id, { step: "crawl", url });
       crawl = await crawlSite(url);
+      if (crawl.home.proxyRefused) {
+        throw new AnalysisError(
+          `La red de este servidor no permite conectar con ${extractDomain(url) ?? url} (lo bloquea un proxy), así que no se puede revisar la web. No es un fallo de la empresa: vuelve a lanzar el análisis desde una red con acceso.`,
+        );
+      }
       if (crawl.home.networkError && !(await hasInternetAccess())) {
         throw new AnalysisError(
           "El servidor no tiene acceso a internet, así que no se puede revisar la web. Vuelve a lanzar el análisis cuando haya conexión.",

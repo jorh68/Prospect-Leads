@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { dashboardData, PRIORITY_SCORE } from "@/lib/crm/queries";
-import { CRM_STATUS_LABELS, SERVICES } from "@/lib/domain/constants";
+import { CRM_STATUS_LABELS, PROVIDER_LABELS, SERVICES, type Provider } from "@/lib/domain/constants";
 import { PageBody, PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { Stat } from "@/components/ui/stat";
@@ -12,7 +12,7 @@ import { BarList } from "@/components/dashboard/bar-list";
 import { ScoreHistogram } from "@/components/dashboard/score-histogram";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { FollowUpDate } from "@/components/crm/follow-up";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, formatRating } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 function pct(part: number, whole: number) {
@@ -109,11 +109,12 @@ export default async function DashboardPage() {
               <NoAnalysis />
             ) : (
               <TableContainer>
-                <Table className="min-w-[640px]">
+                <Table className="min-w-[720px]">
                   <THead>
                     <tr>
                       <TH>Empresa</TH>
                       <TH>Oportunidad principal</TH>
+                      <TH className="text-right">Valoración</TH>
                       <TH className="text-right">Oport.</TH>
                       <TH>Estado</TH>
                       <TH className="text-right">Puntuación</TH>
@@ -138,6 +139,21 @@ export default async function DashboardPage() {
                             </>
                           ) : (
                             <span className="text-ink-4">Sin oportunidades detectadas</span>
+                          )}
+                        </TD>
+                        <TD className="text-right">
+                          {c.rating != null ? (
+                            <>
+                              <span className="block tabular-nums text-ink-2">
+                                {formatRating(c.rating)}
+                                {c.reviewCount != null && <span className="text-ink-3"> · {formatNumber(c.reviewCount)}</span>}
+                              </span>
+                              <span className="block text-xs text-ink-3">
+                                {c.ratingSource ? (PROVIDER_LABELS[c.ratingSource as Provider] ?? c.ratingSource) : "—"}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-ink-4">No disponible</span>
                           )}
                         </TD>
                         <TD className="text-right tabular-nums">{c.opportunityCount}</TD>

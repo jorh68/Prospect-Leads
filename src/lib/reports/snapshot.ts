@@ -35,10 +35,15 @@ export function buildReportContent(input: ReportInput): ReportContent {
 
   const facts: { label: string; value: string }[] = [];
   facts.push({ label: "Web", value: company.website ? displayUrl(company.website) : "No tiene web propia en las fuentes consultadas" });
+  const ratingSource = company.fieldSources.rating
+    ? (PROVIDER_LABELS[company.fieldSources.rating as Provider] ?? company.fieldSources.rating)
+    : null;
   if (company.rating != null) {
     facts.push({
       label: "Valoración",
-      value: `${formatRating(company.rating)} / 5${company.reviewCount != null ? ` (${formatNumber(company.reviewCount)} reseñas)` : ""}`,
+      value: `${formatRating(company.rating)} / 5${company.reviewCount != null ? ` (${formatNumber(company.reviewCount)} reseñas)` : ""}${
+        ratingSource ? ` · Fuente: ${ratingSource}` : ""
+      }`,
     });
   } else {
     facts.push({ label: "Valoración", value: "No disponible en las fuentes consultadas" });

@@ -8,7 +8,7 @@ export interface GooglePlace {
   primaryTypeDisplayName?: { text: string };
   types?: string[];
   formattedAddress?: string;
-  addressComponents?: { longText: string; shortText: string; types: string[] }[];
+  addressComponents?: { longText?: string; shortText?: string; types?: string[] }[];
   location?: { latitude: number; longitude: number };
   websiteUri?: string;
   nationalPhoneNumber?: string;
@@ -31,7 +31,7 @@ export function parseGooglePlace(p: GooglePlace): DiscoveredBusiness | null {
   const name = p.displayName?.text?.trim();
   if (!name) return null;
 
-  const component = (type: string) => p.addressComponents?.find((c) => c.types.includes(type));
+  const component = (type: string) => p.addressComponents?.find((c) => c.types?.includes(type));
   const route = component("route")?.longText;
   const number = component("street_number")?.longText;
 
