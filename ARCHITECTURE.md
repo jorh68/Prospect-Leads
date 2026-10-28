@@ -46,6 +46,7 @@ Commands: `npm run dev`, `npm run build`, `npm test`, `npm run lint`,
 ```
 prisma/schema.prisma          shared — additive changes only, one migration per change
 src/instrumentation.ts        foundation — starts the job worker
+src/proxy.ts                  foundation — password gate for every route (src/lib/auth)
 src/app/
   layout.tsx, globals.css     foundation — shell + design tokens
   page.tsx                    C  dashboard
@@ -54,6 +55,7 @@ src/app/
   companies/[id]/**           B  company page, messages, report
   pipeline/**                 C  CRM pipeline
   settings/**                 foundation — integration status
+  login/**                    foundation — password login page
   api/searches/**             foundation
 src/components/
   ui/**                       foundation — design system (extend, don't fork)
@@ -70,6 +72,7 @@ src/lib/
   domain/types.ts             shared contracts (additive changes only)
   jobs/**                     foundation — queue, worker, handler registry
   llm/**                      foundation — optional Anthropic wrapper
+  auth/**                     foundation — single-password session (APP_PASSWORD)
   discovery/**                foundation
   analysis/**                 A  website analysis, findings, opportunities, scoring
   messages/**                 B  outreach messages

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { env, integrations, overpassUrls } from "@/lib/env";
+import { authConfig, authMode } from "@/lib/auth/session";
 import { PageBody, PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { Table, TableContainer, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -8,7 +9,17 @@ import { Badge } from "@/components/ui/badge";
 export const metadata: Metadata = { title: "Ajustes" };
 
 export default function SettingsPage() {
+  const access = authMode(authConfig());
   const rows = [
+    {
+      name: "Acceso con contraseña",
+      variable: "APP_PASSWORD (AUTH_SECRET opcional)",
+      active: access === "enabled",
+      note:
+        access === "enabled"
+          ? "La app pide contraseña antes de mostrar cualquier dato. Cambiar la contraseña cierra todas las sesiones."
+          : "Sin contraseña la app queda abierta en desarrollo y bloqueada en producción.",
+    },
     {
       name: "OpenStreetMap (Nominatim + Overpass)",
       variable: "OSM_CONTACT_EMAIL (recomendado)",

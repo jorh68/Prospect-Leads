@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Sidebar } from "@/components/shell/sidebar";
+import { authConfig, authMode } from "@/lib/auth/session";
 import "./globals.css";
 
 // Every page reads live data from the database.
@@ -14,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body className="min-h-dvh">
-        <Sidebar />
+        <Sidebar canLogout={authMode(authConfig()) === "enabled"} />
         <main className="min-w-0 lg:pl-56">{children}</main>
       </body>
     </html>
