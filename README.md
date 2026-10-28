@@ -33,6 +33,7 @@ Para producción: `npm run build && npm start`.
 | OpenStreetMap (Nominatim + Overpass) | No necesita. Recomendado `OSM_CONTACT_EMAIL` | Nombre, categoría, web, teléfono, email, dirección, horarios y redes cuando están mapeados. **No tiene valoraciones ni reseñas.** |
 | Google Places API (New) | `GOOGLE_PLACES_API_KEY` | Valoración, número de reseñas, horarios, ficha de Maps y mejor cobertura (hasta 60 resultados por búsqueda). |
 | Anthropic | `ANTHROPIC_API_KEY` (opcional) | Interpretación del análisis y redacción de mensajes. Sin clave se usan reglas. |
+| Remitente | `OUTREACH_SENDER_NAME`, `OUTREACH_SENDER_COMPANY` (opcionales) | Firma de los mensajes y "Preparado por" de los informes. Sin ellas, los mensajes llevan «[Tu nombre]» para rellenar. |
 
 El estado de cada integración se ve en **Ajustes** dentro de la aplicación.
 Nunca se muestran datos inventados: si una fuente no aporta un dato, aparece

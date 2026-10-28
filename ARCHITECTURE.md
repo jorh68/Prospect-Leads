@@ -273,6 +273,25 @@ Owns `src/app/companies/[id]/**`, `src/components/company/**`,
   server-side generation, e.g. `@react-pdf/renderer`, so the download works
   everywhere without a browser binary). `logActivity("report_generated")`.
 
+### Module B — as built
+
+- `src/lib/reports/dossier.ts` `loadCompanyDossier(id)`: company + sources +
+  latest analysis (any status) + latest *completed* analysis with its findings,
+  open opportunities (sorted by impact × confidence) and score. Page, messages
+  and reports all read this.
+- Messages: `src/lib/messages/compose.ts` (rules composer; refuses without an
+  open opportunity), `generate.ts` (LLM via `generateObject` with fact ids,
+  falls back to rules), `actions.ts` (`generateMessagesAction`,
+  `updateMessageAction`). Every generation adds 3 rows (history kept); the page
+  shows the latest per channel. Signature from `OUTREACH_SENDER_NAME` /
+  `OUTREACH_SENDER_COMPANY`, otherwise a visible `[Tu nombre]` placeholder.
+- Reports: `snapshot.ts` builds `ReportContent` (`schema.ts`, versioned),
+  `generate.ts` stores it, `/companies/[id]/report/[reportId]` renders the
+  HTML view and `/pdf` streams the PDF from `pdf.tsx` (`@react-pdf/renderer`,
+  server-side). Reports require a completed analysis.
+- Next actions (`next-actions.ts`) and services (`services.ts`) are derived
+  rules over real state, never generated text.
+
 ## 10. Module C — dashboard, CRM, search & filters
 
 Owns `src/app/page.tsx`, `src/app/companies/page.tsx`,

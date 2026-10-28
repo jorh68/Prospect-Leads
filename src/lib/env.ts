@@ -29,6 +29,9 @@ const schema = z.object({
   PAGESPEED_API_KEY: z.string().trim().optional(),
   /** Development/testing only: allow crawling localhost and private networks. */
   ANALYSIS_ALLOW_PRIVATE_HOSTS: z.stringbool().default(false),
+  // Outreach: how messages are signed and who reports are "prepared by".
+  OUTREACH_SENDER_NAME: z.string().trim().optional(),
+  OUTREACH_SENDER_COMPANY: z.string().trim().optional(),
 
   // Worker tuning
   JOB_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
