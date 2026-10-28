@@ -261,6 +261,25 @@ Owns `src/app/page.tsx`, `src/app/companies/page.tsx`,
   distribution, most common problems, services with most opportunity,
   pipeline status, recent activity. Charts only where they answer a question.
 
+Implemented contracts (module C):
+
+- `import { CrmPanel } from "@/components/crm/crm-panel"` — async server
+  component, `<CrmPanel companyId={id} />`. Renders its own `Panel`, sized for
+  a ~320px column; returns `null` for an unknown id.
+- Server actions in `src/lib/crm/actions.ts` (`setCrmStatusAction`,
+  `bulkSetCrmStatusAction`, `bulkAnalyzeAction`, `updateCrmDetailsAction`,
+  `addNoteAction`, `updateNoteAction`, `deleteNoteAction`) wrap the
+  transactional writes in `src/lib/crm/mutations.ts` and revalidate the app.
+- "Current" findings/opportunities = those of each company's latest
+  completed `Analysis` (by `finishedAt`); `dismissed` opportunities are
+  excluded. See `currentAnalysisIds()` in `src/lib/crm/queries.ts`.
+- Companies list URL params: `q niche city status analysis scoreMin scoreMax
+  oppMin problem service ratingMin reviewsMin web sort dir page`
+  (`src/lib/crm/filters.ts`). Other modules can link to filtered lists, e.g.
+  `/companies?problem=no_whatsapp`.
+- Follow-up dates are calendar days stored at 12:00 UTC (`src/lib/crm/dates.ts`).
+- Priority band: score ≥ 70 (`PRIORITY_SCORE`), same as `ScoreBadge`.
+
 ## 11. Integration checklist (final stream)
 
 Run the app with real data (network access required): search → companies

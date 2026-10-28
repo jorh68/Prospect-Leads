@@ -1,48 +1,102 @@
 import type { Metadata } from "next";
-import { db } from "@/lib/db";
-import { CRM_STATUSES, CRM_STATUS_LABELS } from "@/lib/domain/constants";
+import Link from "next/link";
+import { pipelineData, BOARD_COLUMN_LIMIT } from "@/lib/crm/queries";
 import { PageBody, PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { Table, TableContainer, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/ui/button";
 import { CrmStatusBadge } from "@/components/domain/badges";
+import { PipelineBoard, type BoardColumn } from "@/components/crm/pipeline-board";
+import { PipelineOwnerFilter } from "@/components/crm/owner-filter";
+import { FollowUpDate } from "@/components/crm/follow-up";
+import { formatNumber } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Pipeline" };
 
-/*
- * Pipeline / CRM — OWNED BY THREAD C.
- * Foundation version: company count per CRM status.
- */
-export default async function PipelinePage() {
-  const groups = await db.company.groupBy({ by: ["crmStatus"], _count: { _all: true } });
-  const counts = new Map(groups.map((g) => [g.crmStatus, g._count._all]));
+export default async function PipelinePage(props: PageProps<"/pipeline">) {
+  const sp = await props.searchParams;
+  const owner = typeof sp.owner === "string" && sp.owner.trim() ? sp.owner.trim().slice(0, 80) : null;
+  const { columns, owners, followUps, overdue } = await pipelineData({ owner });
+  const total = columns.reduce((n, c) => n + c.count, 0);
+
+  const board: BoardColumn[] = columns.map((c) => ({
+    status: c.status,
+    count: c.count,
+    cards: c.cards.map((card) => ({ ...card, followUpAt: card.followUpAt?.toISOString() ?? null })),
+    moreHref: c.count > BOARD_COLUMN_LIMIT ? `/companies?status=${c.status}` : null,
+  }));
 
   return (
     <>
-      <PageHeader title="Pipeline" description="Estado comercial de las empresas que estás trabajando." />
+      <PageHeader
+        title="Pipeline"
+        description={`${formatNumber(total)} empresas${owner ? ` de ${owner}` : ""} · arrastra una tarjeta o usa su selector para cambiar el estado`}
+        actions={<PipelineOwnerFilter owners={owners} value={owner} />}
+      />
       <PageBody>
-        <Panel title="Empresas por estado">
-          <TableContainer>
-            <Table>
-              <THead>
-                <tr>
-                  <TH>Estado</TH>
-                  <TH className="text-right">Empresas</TH>
-                </tr>
-              </THead>
-              <TBody>
-                {CRM_STATUSES.map((s) => (
-                  <TR key={s}>
-                    <TD>
-                      <CrmStatusBadge status={s} />
-                      <span className="sr-only">{CRM_STATUS_LABELS[s]}</span>
-                    </TD>
-                    <TD className="text-right tabular-nums">{counts.get(s) ?? 0}</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          </TableContainer>
-        </Panel>
+        {total === 0 ? (
+          <Panel>
+            <EmptyState
+              title={owner ? `${owner} no tiene empresas asignadas` : "El pipeline está vacío"}
+              description={owner ? undefined : "Las empresas que encuentres en tus búsquedas aparecerán aquí como Nuevas."}
+              action={owner ? <ButtonLink href="/pipeline">Ver todo el pipeline</ButtonLink> : <ButtonLink href="/searches" variant="primary">Nueva búsqueda</ButtonLink>}
+            />
+          </Panel>
+        ) : (
+          <>
+            <Panel
+              title="Seguimientos"
+              description={
+                followUps.length === 0
+                  ? "No hay seguimientos programados"
+                  : overdue > 0
+                    ? `${overdue} vencidos · próximos ordenados por fecha`
+                    : "Próximos, ordenados por fecha"
+              }
+            >
+              {followUps.length === 0 ? (
+                <p className="px-4 py-3 text-[13px] text-ink-3">
+                  Programa una fecha de seguimiento desde la ficha de una empresa para verla aquí.
+                </p>
+              ) : (
+                <TableContainer>
+                  <Table className="min-w-[720px]">
+                    <THead>
+                      <tr>
+                        <TH>Fecha</TH>
+                        <TH>Empresa</TH>
+                        <TH>Próxima acción</TH>
+                        <TH>Responsable</TH>
+                        <TH>Estado</TH>
+                      </tr>
+                    </THead>
+                    <TBody>
+                      {followUps.map((c) => (
+                        <TR key={c.id}>
+                          <TD className="w-36 text-xs">
+                            <FollowUpDate date={c.followUpAt} />
+                          </TD>
+                          <TD className="max-w-60 truncate font-medium text-ink">
+                            <Link href={`/companies/${c.id}`} className="hover:text-accent-700 hover:underline">
+                              {c.name}
+                            </Link>
+                          </TD>
+                          <TD className="max-w-96 truncate">{c.nextAction ?? <span className="text-ink-4">Sin definir</span>}</TD>
+                          <TD>{c.owner ?? <span className="text-ink-4">Sin asignar</span>}</TD>
+                          <TD>
+                            <CrmStatusBadge status={c.crmStatus} />
+                          </TD>
+                        </TR>
+                      ))}
+                    </TBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </Panel>
+            <PipelineBoard columns={board} />
+          </>
+        )}
       </PageBody>
     </>
   );

@@ -1,26 +1,54 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import { dashboardData, PRIORITY_SCORE } from "@/lib/crm/queries";
+import { CRM_STATUS_LABELS, SERVICES } from "@/lib/domain/constants";
 import { PageBody, PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { Stat } from "@/components/ui/stat";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { SearchStatusBadge } from "@/components/domain/badges";
-import { formatNumber, formatRelative } from "@/lib/format";
+import { Table, TableContainer, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { CrmStatusBadge, ScoreBadge } from "@/components/domain/badges";
+import { BarList } from "@/components/dashboard/bar-list";
+import { ScoreHistogram } from "@/components/dashboard/score-histogram";
+import { ActivityFeed } from "@/components/dashboard/activity-feed";
+import { FollowUpDate } from "@/components/crm/follow-up";
+import { formatNumber } from "@/lib/format";
+import { cn } from "@/lib/cn";
 
-/*
- * Dashboard — OWNED BY THREAD C (dashboard + CRM + filters).
- * Foundation version: live counters, recent searches and activity feed.
- */
+function pct(part: number, whole: number) {
+  return whole > 0 ? `${Math.round((part / whole) * 100)} %` : "—";
+}
+
+function NoAnalysis() {
+  return <p className="px-4 py-6 text-center text-[13px] text-ink-3">Aparecerá cuando haya empresas analizadas.</p>;
+}
+
 export default async function DashboardPage() {
-  const [companies, analyzed, opportunities, priority, searches, activity] = await Promise.all([
-    db.company.count(),
-    db.company.count({ where: { analysisStatus: "completed" } }),
-    db.opportunity.count({ where: { status: "open" } }),
-    db.company.count({ where: { crmStatus: "priority" } }),
-    db.search.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
-    db.activity.findMany({ orderBy: { createdAt: "desc" }, take: 10 }),
-  ]);
+  const d = await dashboardData();
+  const t = d.totals;
+
+  if (t.total === 0) {
+    return (
+      <>
+        <PageHeader title="Dashboard" description="Resumen de empresas, análisis y pipeline comercial." />
+        <PageBody>
+          <Panel>
+            <EmptyState
+              title={d.hasSearches ? "Tus búsquedas todavía no han encontrado empresas" : "Empieza buscando empresas"}
+              description='Introduce un tipo de negocio y una ubicación, por ejemplo "Clínicas dentales" en "Madrid". Las empresas reales que se encuentren se analizarán y aparecerán aquí.'
+              action={
+                <ButtonLink href="/searches" variant="primary">
+                  Nueva búsqueda
+                </ButtonLink>
+              }
+            />
+          </Panel>
+        </PageBody>
+      </>
+    );
+  }
+
+  const pipelineMax = Math.max(1, ...d.pipeline.map((p) => p.count));
 
   return (
     <>
@@ -34,47 +62,197 @@ export default async function DashboardPage() {
         }
       />
       <PageBody>
-        <div className="grid grid-cols-2 divide-line rounded-lg border border-line bg-surface shadow-xs md:grid-cols-4 md:divide-x [&>*:nth-child(n+3)]:border-t [&>*:nth-child(n+3)]:border-line md:[&>*:nth-child(n+3)]:border-t-0">
-          <Stat label="Empresas encontradas" value={formatNumber(companies)} />
-          <Stat label="Empresas analizadas" value={formatNumber(analyzed)} />
-          <Stat label="Oportunidades abiertas" value={formatNumber(opportunities)} />
-          <Stat label="Prioritarias" value={formatNumber(priority)} />
+        <div className="grid grid-cols-2 rounded-lg border border-line bg-surface shadow-xs sm:grid-cols-3 lg:grid-cols-5 [&>*]:border-line max-lg:[&>*]:border-b lg:divide-x lg:divide-line">
+          <Link href="/companies" className="hover:bg-subtle/50">
+            <Stat label="Empresas encontradas" value={formatNumber(t.total)} />
+          </Link>
+          <Link href="/companies?analysis=completed" className="hover:bg-subtle/50">
+            <Stat
+              label="Empresas analizadas"
+              value={formatNumber(t.analyzed)}
+              hint={
+                <>
+                  {pct(t.analyzed, t.total)} del total
+                  {t.analysisPending > 0 && ` · ${t.analysisPending} en cola`}
+                  {t.analysisFailed > 0 && <span className="text-danger-700"> · {t.analysisFailed} con error</span>}
+                </>
+              }
+            />
+          </Link>
+          <Link href={`/companies?scoreMin=${PRIORITY_SCORE}`} className="hover:bg-subtle/50">
+            <Stat label="Prioritarias" value={formatNumber(t.priorityCount)} hint={`Puntuación ≥ ${PRIORITY_SCORE}, sin cerrar`} />
+          </Link>
+          <Link href="/pipeline" className="hover:bg-subtle/50">
+            <Stat label="En conversación" value={formatNumber(t.activePipeline)} hint="Contactada → Propuesta" />
+          </Link>
+          <Link href="/pipeline" className="col-span-2 hover:bg-subtle/50 sm:col-span-1">
+            <Stat
+              label="Seguimientos vencidos"
+              value={<span className={cn(t.overdue > 0 && "text-danger-700")}>{formatNumber(t.overdue)}</span>}
+              hint={t.overdue > 0 ? "Revisa el pipeline" : "Al día"}
+            />
+          </Link>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Panel title="Búsquedas recientes" actions={<ButtonLink href="/searches" variant="ghost" size="sm">Ver todas</ButtonLink>}>
-            {searches.length === 0 ? (
-              <EmptyState title="Sin búsquedas" description="Lanza la primera búsqueda para empezar a encontrar empresas." />
+        <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
+          <Panel
+            className="lg:col-span-2"
+            title="Oportunidades prioritarias"
+            description="Empresas abiertas con mayor puntuación heurística"
+            actions={
+              <ButtonLink href="/companies" variant="ghost" size="sm">
+                Ver todas
+              </ButtonLink>
+            }
+          >
+            {d.priority.length === 0 ? (
+              <NoAnalysis />
+            ) : (
+              <TableContainer>
+                <Table className="min-w-[640px]">
+                  <THead>
+                    <tr>
+                      <TH>Empresa</TH>
+                      <TH>Oportunidad principal</TH>
+                      <TH className="text-right">Oport.</TH>
+                      <TH>Estado</TH>
+                      <TH className="text-right">Puntuación</TH>
+                    </tr>
+                  </THead>
+                  <TBody>
+                    {d.priority.map((c) => (
+                      <TR key={c.id}>
+                        <TD className="max-w-56">
+                          <Link href={`/companies/${c.id}`} className="block truncate font-medium text-ink hover:text-accent-700 hover:underline">
+                            {c.name}
+                          </Link>
+                          <span className="block truncate text-xs text-ink-3">{[c.niche, c.city].filter(Boolean).join(" · ") || "—"}</span>
+                        </TD>
+                        <TD className="max-w-72">
+                          {c.topOpportunity ? (
+                            <>
+                              <span className="block truncate text-ink-2">{c.topOpportunity.title}</span>
+                              <span className="block truncate text-xs text-ink-3">
+                                {SERVICES[c.topOpportunity.serviceKey as keyof typeof SERVICES]?.label ?? c.topOpportunity.serviceKey}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-ink-4">Sin oportunidades detectadas</span>
+                          )}
+                        </TD>
+                        <TD className="text-right tabular-nums">{c.opportunityCount}</TD>
+                        <TD>
+                          <CrmStatusBadge status={c.crmStatus} />
+                        </TD>
+                        <TD className="text-right">
+                          <ScoreBadge score={c.score} />
+                        </TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Panel>
+
+          <Panel
+            title="Próximos seguimientos"
+            actions={
+              <ButtonLink href="/pipeline" variant="ghost" size="sm">
+                Pipeline
+              </ButtonLink>
+            }
+          >
+            {d.upcoming.length === 0 ? (
+              <p className="px-4 py-6 text-center text-[13px] text-ink-3">No hay seguimientos programados.</p>
             ) : (
               <ul className="divide-y divide-line">
-                {searches.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <Link href={`/searches/${s.id}`} className="truncate text-[13px] font-medium text-ink hover:text-accent-700">
-                      {s.query}
-                    </Link>
-                    <div className="flex shrink-0 items-center gap-3 text-xs text-ink-3">
-                      <span className="tabular-nums">{s.resultCount} empresas</span>
-                      <SearchStatusBadge status={s.status} />
+                {d.upcoming.map((c) => (
+                  <li key={c.id} className="px-4 py-2.5">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <Link href={`/companies/${c.id}`} className="min-w-0 truncate text-[13px] font-medium text-ink hover:text-accent-700 hover:underline">
+                        {c.name}
+                      </Link>
+                      <FollowUpDate date={c.followUpAt} className="shrink-0 text-xs" />
                     </div>
+                    {(c.nextAction || c.owner) && (
+                      <p className="mt-0.5 truncate text-xs text-ink-3">{[c.nextAction, c.owner].filter(Boolean).join(" · ")}</p>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
           </Panel>
+        </div>
 
-          <Panel title="Actividad reciente">
-            {activity.length === 0 ? (
-              <EmptyState title="Sin actividad" />
+        <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
+          <Panel
+            title="Distribución de puntuaciones"
+            description={d.scoredCount > 0 ? `${formatNumber(d.scoredCount)} empresas puntuadas · heurística 0–100` : "Puntuación heurística 0–100"}
+          >
+            {d.scoredCount === 0 ? <NoAnalysis /> : <ScoreHistogram bins={d.histogram} priorityFrom={PRIORITY_SCORE} />}
+          </Panel>
+
+          <Panel title="Problemas más habituales" description="Empresas analizadas en las que se detecta">
+            {d.problems.length === 0 ? (
+              <NoAnalysis />
             ) : (
-              <ul className="divide-y divide-line">
-                {activity.map((a) => (
-                  <li key={a.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-[13px]">
-                    <span className="text-ink-2">{a.message}</span>
-                    <span className="shrink-0 text-xs text-ink-4">{formatRelative(a.createdAt)}</span>
-                  </li>
-                ))}
-              </ul>
+              <BarList
+                unit="empresas"
+                max={t.analyzed}
+                items={d.problems.map((p) => ({
+                  key: p.value,
+                  label: p.label,
+                  value: p.count,
+                  detail: pct(p.count, t.analyzed),
+                  href: `/companies?problem=${encodeURIComponent(p.value)}`,
+                }))}
+              />
             )}
+          </Panel>
+
+          <Panel title="Servicios con mayor oportunidad" description="Empresas con al menos una oportunidad para el servicio">
+            {d.services.length === 0 ? (
+              <NoAnalysis />
+            ) : (
+              <BarList
+                unit="empresas"
+                items={d.services.map((s) => ({
+                  key: s.key,
+                  label: SERVICES[s.key].label,
+                  value: s.companies,
+                  detail: s.highImpact > 0 ? `${s.highImpact} impacto alto` : undefined,
+                  href: `/companies?service=${s.key}`,
+                }))}
+              />
+            )}
+          </Panel>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
+          <Panel
+            title="Estado del pipeline"
+            description="Empresas por estado del CRM"
+            actions={
+              <ButtonLink href="/pipeline" variant="ghost" size="sm">
+                Abrir
+              </ButtonLink>
+            }
+          >
+            <BarList
+              unit="empresas"
+              max={pipelineMax}
+              items={d.pipeline.map((p) => ({
+                key: p.status,
+                label: CRM_STATUS_LABELS[p.status],
+                value: p.count,
+                href: `/companies?status=${p.status}`,
+              }))}
+            />
+          </Panel>
+
+          <Panel className="lg:col-span-2" title="Actividad reciente">
+            {d.activity.length === 0 ? <p className="px-4 py-6 text-center text-[13px] text-ink-3">Sin actividad todavía.</p> : <ActivityFeed items={d.activity} />}
           </Panel>
         </div>
       </PageBody>

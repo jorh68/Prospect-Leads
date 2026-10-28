@@ -229,6 +229,8 @@ export const ACTIVITY_TYPES = [
   "analysis_failed",
   "status_changed",
   "note_added",
+  "note_updated",
+  "note_deleted",
   "followup_set",
   "owner_changed",
   "message_generated",
