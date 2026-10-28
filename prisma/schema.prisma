@@ -1,0 +1,379 @@
+// Prospect Leads — data model.
+//
+// Conventions
+// - SQLite in development; the schema avoids SQLite-only features so switching
+//   `provider` to "postgresql" works without model changes.
+// - Enum-like columns are plain strings. Allowed values live in
+//   src/lib/domain/constants.ts and are validated with zod at the boundaries.
+// - Every fact about a company that came from outside keeps its provenance:
+//   raw payloads in CompanySource, and per-field origin in Company.fieldSources.
+// - Nothing in this database is ever seeded with fabricated businesses.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── Discovery ─────────────────────────
+
+/// A niche + location search requested by the user.
+model Search {
+  id             String    @id @default(cuid())
+  query          String // raw text as typed, e.g. "Clínicas dentales en Madrid"
+  niche          String // e.g. "Clínicas dentales"
+  location       String // e.g. "Madrid"
+  requestedCount Int
+  /// pending | running | completed | partial | failed
+  status         String    @default("pending")
+  /// Providers that were actually queried, e.g. ["osm"] or ["google_places","osm"]
+  providers      Json?
+  /// Geocoded area returned by the geocoder (display name, bbox, centre)
+  area           Json?
+  resultCount    Int       @default(0)
+  /// Human-readable warnings (e.g. "Google Places sin configurar: solo OSM")
+  warnings       Json?
+  error          String?
+  createdAt      DateTime  @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+
+  results    SearchResult[]
+  jobs       Job[]
+  activities Activity[]
+
+  @@index([createdAt])
+}
+
+/// Links a company to every search that found it (a company can appear in many).
+model SearchResult {
+  id        String   @id @default(cuid())
+  searchId  String
+  companyId String
+  rank      Int
+  provider  String
+  createdAt DateTime @default(now())
+
+  search  Search  @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([searchId, companyId])
+  @@index([companyId])
+}
+
+// ───────────────────────── Companies ─────────────────────────
+
+model Company {
+  id             String  @id @default(cuid())
+  name           String
+  /// lowercase, accent-free name used for de-duplication and search
+  normalizedName String
+  /// Niche label from the search that first found it (e.g. "Clínicas dentales")
+  niche          String?
+  /// Category as reported by the source (e.g. "dentist", "Dental clinic")
+  category       String?
+
+  website String?
+  /// Registrable host without "www." — main de-duplication key when present
+  domain  String?
+  phone   String?
+  email   String?
+
+  street     String?
+  postalCode String?
+  city       String?
+  region     String?
+  country    String?
+  address    String? // formatted single-line address
+  latitude   Float?
+  longitude  Float?
+
+  /// Raw opening hours string or structured hours from the source
+  openingHours Json?
+  rating       Float?
+  reviewCount  Int?
+  /// Link to the listing in the source (Google Maps URL, OSM URL…)
+  mapsUrl      String?
+  description  String?
+  /// operational | closed_temporarily | closed_permanently | unknown
+  businessStatus String?
+
+  /// { fieldName: provider } — where each field value came from
+  fieldSources Json?
+
+  // ── CRM ──
+  /// new | analyzed | priority | contacted | replied | meeting | proposal | won | lost
+  crmStatus   String    @default("new")
+  owner       String?
+  nextAction  String?
+  followUpAt  DateTime?
+
+  // ── Denormalised from the latest analysis/score, for fast lists & filters ──
+  score            Int?
+  opportunityCount Int       @default(0)
+  analyzedAt       DateTime?
+  /// none | queued | running | completed | failed
+  analysisStatus   String    @default("none")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sources        CompanySource[]
+  socialProfiles SocialProfile[]
+  searchResults  SearchResult[]
+  analyses       Analysis[]
+  findings       Finding[]
+  opportunities  Opportunity[]
+  scores         Score[]
+  messages       Message[]
+  reports        Report[]
+  notes          Note[]
+  activities     Activity[]
+  jobs           Job[]
+
+  @@index([domain])
+  @@index([normalizedName])
+  @@index([crmStatus])
+  @@index([score])
+  @@index([city])
+}
+
+/// Raw record from each provider that contributed to a company.
+model CompanySource {
+  id         String   @id @default(cuid())
+  companyId  String
+  /// osm | google_places | website
+  provider   String
+  externalId String
+  url        String?
+  payload    Json
+  fetchedAt  DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@index([companyId])
+}
+
+model SocialProfile {
+  id        String   @id @default(cuid())
+  companyId String
+  /// facebook | instagram | linkedin | x | tiktok | youtube | whatsapp | other
+  platform  String
+  url       String
+  /// provider that reported it (osm, google_places, website)
+  source    String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, platform, url])
+}
+
+// ───────────────────────── Analysis ─────────────────────────
+
+/// One analysis run of a company (website crawl + interpretation).
+model Analysis {
+  id         String    @id @default(cuid())
+  companyId  String
+  /// queued | running | completed | failed
+  status     String    @default("queued")
+  /// Bumped when the analysis logic changes, so old runs can be told apart
+  version    String
+  url        String?
+  finalUrl   String?
+  httpStatus Int?
+  loadTimeMs Int?
+  pageBytes  Int?
+  /// Structured signals extracted from the site (see src/lib/domain/types.ts)
+  signals    Json?
+  /// Short interpreted summary of the company's situation
+  summary    String?
+  /// rules | llm — how the interpretation was produced
+  generator  String?
+  error      String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  findings      Finding[]
+  opportunities Opportunity[]
+  scores        Score[]
+
+  @@index([companyId, createdAt])
+}
+
+/// An evidence-backed observation (positive or negative) made during analysis.
+model Finding {
+  id             String   @id @default(cuid())
+  analysisId     String
+  companyId      String
+  /// website | contact | booking | lead_capture | technical | mobile | social | reputation | content
+  category       String
+  /// stable key, e.g. "no_whatsapp", "has_booking_widget"
+  key            String
+  label          String
+  /// positive | neutral | issue
+  kind           String
+  /// info | low | medium | high
+  severity       String   @default("info")
+  /// What was observed, verbatim where possible (snippet, URL, metric)
+  evidence       String
+  evidenceUrl    String?
+  /// Why this matters commercially
+  interpretation String?
+  createdAt      DateTime @default(now())
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([key])
+}
+
+model Opportunity {
+  id          String   @id @default(cuid())
+  companyId   String
+  analysisId  String
+  /// stable key from the opportunity catalog, e.g. "missing_whatsapp"
+  type        String
+  title       String
+  problem     String
+  evidence    String
+  consequence String
+  solution    String
+  /// key from the service catalog, e.g. "whatsapp_automation"
+  serviceKey  String
+  /// low | medium | high
+  impact      String
+  impactNote  String?
+  /// 0..1 — how sure we are, given the evidence available
+  confidence  Float
+  /// open | dismissed | converted
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([type])
+  @@index([serviceKey])
+}
+
+/// Heuristic priority score with a full, human-readable breakdown.
+model Score {
+  id         String   @id @default(cuid())
+  companyId  String
+  analysisId String?
+  /// 0..100
+  total      Int
+  /// [{ factor, label, weight, value, points, explanation }]
+  breakdown  Json
+  version    String
+  createdAt  DateTime @default(now())
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  analysis Analysis? @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+}
+
+// ───────────────────────── Outreach ─────────────────────────
+
+model Message {
+  id        String   @id @default(cuid())
+  companyId String
+  /// email | linkedin | whatsapp
+  channel   String
+  subject   String?
+  body      String
+  /// rules | llm
+  generator String
+  /// Facts and opportunity ids the message was built from
+  basis     Json?
+  edited    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, channel])
+}
+
+/// A frozen snapshot of a company report; rendered to HTML/PDF on demand.
+model Report {
+  id        String   @id @default(cuid())
+  companyId String
+  title     String
+  /// Snapshot of everything the report shows, so it stays stable over time
+  content   Json
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+}
+
+// ───────────────────────── CRM & activity ─────────────────────────
+
+model Note {
+  id        String   @id @default(cuid())
+  companyId String
+  body      String
+  author    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+}
+
+/// Append-only log of everything that happens, for the dashboard feed and audit.
+model Activity {
+  id        String   @id @default(cuid())
+  /// see ACTIVITY_TYPES in src/lib/domain/constants.ts
+  type      String
+  message   String
+  meta      Json?
+  companyId String?
+  searchId  String?
+  createdAt DateTime @default(now())
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  search  Search?  @relation(fields: [searchId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([companyId, createdAt])
+}
+
+// ───────────────────────── Background jobs ─────────────────────────
+
+/// Persistent queue for long-running work (discovery, analysis).
+model Job {
+  id         String    @id @default(cuid())
+  /// discovery | analysis
+  type       String
+  /// queued | running | completed | failed
+  status     String    @default("queued")
+  payload    Json
+  /// free-form progress, e.g. { done: 3, total: 20, step: "overpass" }
+  progress   Json?
+  attempts   Int       @default(0)
+  error      String?
+  searchId   String?
+  companyId  String?
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  search  Search?  @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}

@@ -1,0 +1,75 @@
+import type { OutreachInput } from "@/lib/messages/facts";
+
+/** Obviously fictional company used only in tests. */
+export function outreachInput(overrides: Partial<OutreachInput> = {}): OutreachInput {
+  return {
+    company: {
+      name: "Clínica Dental Ejemplo S.L.",
+      niche: "Clínicas dentales",
+      category: "Clínica dental",
+      city: "Madrid",
+      website: "https://dental-ejemplo.test/",
+      phone: "+34600000001",
+      email: "hola@dental-ejemplo.test",
+      rating: 4.7,
+      reviewCount: 312,
+      mapsUrl: null,
+      fieldSources: { rating: "google_places", reviewCount: "google_places", website: "osm" },
+    },
+    socials: [{ platform: "instagram", url: "https://instagram.com/dentalejemplo" }],
+    findings: [
+      {
+        id: "f1",
+        category: "contact",
+        key: "no_whatsapp",
+        label: "Sin WhatsApp",
+        kind: "issue",
+        severity: "high",
+        evidence: "No hay enlaces wa.me ni api.whatsapp.com en 3 páginas revisadas",
+        evidenceUrl: "https://dental-ejemplo.test/",
+        interpretation: "Muchos pacientes prefieren escribir antes que llamar.",
+      },
+      {
+        id: "f2",
+        category: "booking",
+        key: "has_phone_cta",
+        label: "Teléfono visible en la cabecera",
+        kind: "positive",
+        severity: "info",
+        evidence: "Botón «Llámanos» en la cabecera",
+        evidenceUrl: null,
+        interpretation: null,
+      },
+    ],
+    opportunities: [
+      {
+        id: "o-low",
+        type: "no_reviews_reply",
+        title: "Reseñas sin respuesta",
+        problem: "Las reseñas recientes no tienen respuesta del negocio.",
+        evidence: "0 respuestas en las 5 reseñas más recientes",
+        consequence: "Transmite poca atención al paciente.",
+        solution: "Responder todas las reseñas con ayuda de plantillas revisadas.",
+        serviceKey: "review_management",
+        impact: "low",
+        impactNote: null,
+        confidence: 0.6,
+      },
+      {
+        id: "o-high",
+        type: "missing_whatsapp",
+        title: "Sin canal de WhatsApp",
+        problem: "La web no ofrece WhatsApp como canal de contacto",
+        evidence: "No hay enlaces wa.me ni api.whatsapp.com en 3 páginas revisadas",
+        consequence: "Quien prefiere escribir tiene que llamar o rellenar un formulario, y parte de esas consultas se pierden.",
+        solution: "Activar WhatsApp Business con respuesta automática y derivación al equipo.",
+        serviceKey: "whatsapp_automation",
+        impact: "high",
+        impactNote: "Puede recuperar consultas que hoy no llegan a convertirse en cita.",
+        confidence: 0.85,
+      },
+    ],
+    analyzedUrl: "https://dental-ejemplo.test/",
+    ...overrides,
+  };
+}

@@ -1,0 +1,85 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/*
+ * Prospect Leads design tokens.
+ * Light B2B palette: white surfaces, neutral greys, near-black text and one
+ * accent (cobalt). Status colours (success/warning/danger) are reserved for
+ * state badges only — never decoration.
+ */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Neutrals */
+  --color-canvas: #f7f7f8; /* app background */
+  --color-surface: #ffffff; /* panels, tables */
+  --color-subtle: #f3f4f6; /* hover rows, inputs */
+  --color-line: #e4e4e7; /* borders */
+  --color-line-strong: #d4d4d8;
+  --color-ink: #111113; /* primary text */
+  --color-ink-2: #3f3f46; /* secondary text */
+  --color-ink-3: #71717a; /* muted text, labels */
+  --color-ink-4: #a1a1aa; /* placeholders, disabled */
+
+  /* Accent (the only brand colour) */
+  --color-accent-50: #eef4ff;
+  --color-accent-100: #dce7fd;
+  --color-accent-200: #bcd0fb;
+  --color-accent-500: #3b74e6;
+  --color-accent-600: #1d5bd6;
+  --color-accent-700: #1848ad;
+  --color-accent-800: #173d8c;
+
+  /* Status (badges and inline states only) */
+  --color-success-50: #ecfdf3;
+  --color-success-600: #15803d;
+  --color-success-700: #166534;
+  --color-warning-50: #fffbeb;
+  --color-warning-600: #b45309;
+  --color-warning-700: #92400e;
+  --color-danger-50: #fef2f2;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  /* Type scale tuned for dense, tabular UI (base 14px) */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --shadow-xs: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-pop: 0 8px 24px rgb(16 24 40 / 0.12), 0 1px 3px rgb(16 24 40 / 0.08);
+}
+
+@layer base {
+  html {
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: var(--color-accent-100);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 1px;
+  }
+}
+
+@media print {
+  body {
+    background: white;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
