@@ -138,6 +138,17 @@ describe("companies without a usable website", () => {
     expect(down.impactNote).toMatch(/temporal/);
   });
 
+  it("treats a server error (5xx) as possibly temporary, but a 404 as a real problem", () => {
+    const at = (status: number) =>
+      run(context(), crawlOf([page("https://dental-ejemplo.test/", null, "home", { status, error: `HTTP ${status}`, networkError: false })], null));
+    const e500 = at(500).opportunities.find((o) => o.type === "website_down")!;
+    expect(e500.impactNote).toMatch(/temporal/);
+    expect(e500.confidence).toBeLessThan(0.7);
+    const e404 = at(404).opportunities.find((o) => o.type === "website_down")!;
+    expect(e404.impactNote).toBeNull();
+    expect(e404.confidence).toBeGreaterThan(0.8);
+  });
+
   it("does not blame the company when its site blocks bots", () => {
     const blocked = { ...page("https://dental-ejemplo.test/", null, "home", { status: 403, error: "HTTP 403", networkError: false }) };
     const r = run(context(), { ...crawlOf([blocked], null), blocked: true });

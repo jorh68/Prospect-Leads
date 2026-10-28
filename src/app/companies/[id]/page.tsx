@@ -118,12 +118,22 @@ export default async function CompanyPage(props: PageProps<"/companies/[id]">) {
   });
 
   const limitations = signalsLimitationsSchema.safeParse(d.analysis?.signals);
+  // Load time and size describe the page only when it was actually served (not an error page).
+  const pageServed = d.analysis?.httpStatus != null && d.analysis.httpStatus >= 200 && d.analysis.httpStatus < 300;
   const analysisMetrics = d.analysis
     ? [
         { label: "Página analizada", value: d.analysis.finalUrl ?? d.analysis.url ? displayUrl(d.analysis.finalUrl ?? d.analysis.url) : "Sin web" },
         { label: "Respuesta HTTP", value: d.analysis.httpStatus != null ? String(d.analysis.httpStatus) : "—" },
-        { label: "Tiempo de carga", value: d.analysis.loadTimeMs != null ? `${formatNumber(Math.round(d.analysis.loadTimeMs / 100) / 10)} s` : "—" },
-        { label: "Peso de la página", value: d.analysis.pageBytes != null ? `${formatNumber(Math.round(d.analysis.pageBytes / 1024))} KB` : "—" },
+        {
+          label: "Tiempo de carga",
+          value:
+            pageServed && d.analysis.loadTimeMs != null
+              ? d.analysis.loadTimeMs < 100
+                ? "< 0,1 s"
+                : `${formatNumber(Math.round(d.analysis.loadTimeMs / 100) / 10)} s`
+              : "—",
+        },
+        { label: "Peso de la página", value: pageServed && d.analysis.pageBytes != null ? `${formatNumber(Math.max(1, Math.round(d.analysis.pageBytes / 1024)))} KB` : "—" },
         { label: "Interpretación", value: d.analysis.generator === "llm" ? "IA sobre señales detectadas" : "Reglas" },
       ]
     : [];

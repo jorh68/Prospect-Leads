@@ -63,7 +63,8 @@ export function buildOpportunities(
       confidence: has("no_website") ? 0.7 : 0.8,
     });
   } else if (has("website_unreachable") || has("website_http_error") || has("website_parked") || has("website_under_construction")) {
-    const transient = has("website_unreachable");
+    // Network failures and 5xx responses are often temporary outages; 4xx/parked pages are not.
+    const transient = has("website_unreachable") || (has("website_http_error") && (s.website.httpStatus ?? 0) >= 500);
     add("website_down", {
       problem: "La web del negocio no está operativa.",
       evidence: ev("website_unreachable", "website_http_error", "website_parked", "website_under_construction"),

@@ -75,7 +75,9 @@ export function buildFindings(ctx: CompanyContext, s: AnalysisSignals, f: Facts,
         "website_http_error",
         "high",
         `${s.website.url} respondió con error HTTP ${s.website.httpStatus}.`,
-        "Los clientes que llegan desde Google o la ficha del mapa encuentran una página de error y se van.",
+        s.website.httpStatus >= 500
+          ? "Los clientes que llegan desde Google o la ficha del mapa encuentran una página de error y se van. Un error del servidor puede ser temporal: conviene comprobarlo de nuevo antes de contactar."
+          : "Los clientes que llegan desde Google o la ficha del mapa encuentran una página de error y se van.",
         s.website.url,
       );
     } else {

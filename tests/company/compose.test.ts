@@ -50,6 +50,28 @@ describe("composeMessages", () => {
     expect(m.whatsapp.body).toContain("la información pública de Clínica Dental Ejemplo");
   });
 
+  it("asks about how clients find them, not about the website, when there is no website", () => {
+    const base = outreachInput();
+    const noWebsite = {
+      ...base.opportunities[1]!,
+      id: "o-web",
+      type: "no_website",
+      problem: "Clínica Dental Ejemplo no tiene página web registrada en ninguna fuente.",
+      serviceKey: "website_improvement",
+    };
+    const m = composeMessages(
+      { ...base, company: { ...base.company, website: null }, opportunities: [noWebsite], analyzedUrl: null },
+      sender,
+    );
+    for (const body of [m.email.body, m.linkedin.body, m.whatsapp.body]) {
+      expect(body).not.toContain("¿La web os trae clientes");
+      expect(body).toContain("por recomendación y por la ficha del mapa");
+      expect(body).toContain("no encontré una página web vuestra.");
+      expect(body).not.toContain("ninguna fuente");
+    }
+    expect(m.email.subject).toBe("Cómo encuentran a Clínica Dental Ejemplo en internet");
+  });
+
   it("uses a visible placeholder when the sender is not configured", () => {
     const m = composeMessages(outreachInput(), { name: null, company: null });
     expect(m.email.body.endsWith(SENDER_PLACEHOLDER)).toBe(true);

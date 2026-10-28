@@ -33,6 +33,12 @@ export default function SettingsPage() {
       active: integrations.pageSpeed(),
       note: "Métricas reales de rendimiento móvil (Lighthouse) en cada análisis. Sin clave, la velocidad se estima por el tiempo de descarga del HTML.",
     },
+    {
+      name: "Remitente de mensajes e informes",
+      variable: "OUTREACH_SENDER_NAME, OUTREACH_SENDER_COMPANY",
+      active: Boolean(env().OUTREACH_SENDER_NAME),
+      note: `Firma de los mensajes y "Preparado por" de los informes${env().OUTREACH_SENDER_NAME ? ` (${[env().OUTREACH_SENDER_NAME, env().OUTREACH_SENDER_COMPANY].filter(Boolean).join(", ")})` : ""}. Sin nombre, los mensajes llevan «[Tu nombre]» para rellenar.`,
+    },
   ];
 
   return (

@@ -42,6 +42,20 @@ const QUESTIONS: Record<string, string> = {
 };
 const DEFAULT_QUESTION = "¿Es algo que ya tengáis en el radar?";
 
+/**
+ * Opportunity types whose situation contradicts the generic service question
+ * (asking "does the website bring clients?" to a business without one).
+ */
+const TYPE_QUESTIONS: Record<string, string> = {
+  no_website: "¿Ahora mismo los clientes os llegan sobre todo por recomendación y por la ficha del mapa?",
+  website_down: "¿Es algo puntual o lleva un tiempo así?",
+};
+
+/** Plain wording for observations whose analysis text reads like a system log. */
+const TYPE_OBSERVATIONS: Record<string, string> = {
+  no_website: "no encontré una página web vuestra.",
+};
+
 const SUBJECTS: Record<string, (name: string) => string> = {
   ai_receptionist: (n) => `Llamadas fuera de horario en ${n}`,
   whatsapp_automation: (n) => `WhatsApp en ${n}`,
@@ -54,6 +68,11 @@ const SUBJECTS: Record<string, (name: string) => string> = {
   chatbot: (n) => `Consultas en la web de ${n}`,
   website_improvement: (n) => `Una idea sobre la web de ${n}`,
   process_automation: (n) => `Tareas manuales en ${n}`,
+};
+
+const TYPE_SUBJECTS: Record<string, (name: string) => string> = {
+  no_website: (n) => `Cómo encuentran a ${n} en internet`,
+  website_down: (n) => `Un aviso sobre la web de ${n}`,
 };
 
 const SOFT_CLOSE = "Si os interesa, os cuento en una llamada corta cómo lo plantearía en vuestro caso.";
@@ -109,10 +128,10 @@ export function composeMessages(input: OutreachInput, sender: Sender): ComposedM
     company.reviewCount >= GOOD_REPUTATION.reviews;
 
   cite(`opportunity:${top.id}`);
-  const problem = afterColon(sentence(top.problem));
+  const problem = TYPE_OBSERVATIONS[top.type] ?? afterColon(sentence(top.problem));
   const consequence = sentence(top.consequence);
   const detail = `${problem}${problem.length + consequence.length <= 320 ? ` ${consequence}` : ""}`;
-  const question = QUESTIONS[top.serviceKey] ?? DEFAULT_QUESTION;
+  const question = TYPE_QUESTIONS[top.type] ?? QUESTIONS[top.serviceKey] ?? DEFAULT_QUESTION;
   const signature = sender.name ?? SENDER_PLACEHOLDER;
   const where = site ? `vuestra web (${site})` : `la información pública de ${name}`;
 
@@ -153,7 +172,7 @@ export function composeMessages(input: OutreachInput, sender: Sender): ComposedM
 
   return {
     email: {
-      subject: (SUBJECTS[top.serviceKey] ?? ((n: string) => `Una pregunta para ${n}`))(name),
+      subject: (TYPE_SUBJECTS[top.type] ?? SUBJECTS[top.serviceKey] ?? ((n: string) => `Una pregunta para ${n}`))(name),
       body: emailParts.join("\n\n"),
     },
     linkedin: { body: linkedin },

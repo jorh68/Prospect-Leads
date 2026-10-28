@@ -5,10 +5,12 @@ ubicación, los investiga, detecta oportunidades concretas, los prioriza y
 ayuda a preparar el contacto. Toda la información se guarda en una base de
 datos local.
 
-> Estado: base del proyecto (descubrimiento real de empresas, modelo de datos,
-> interfaz y cola de trabajos). El análisis de webs, las fichas completas, los
-> mensajes, los informes PDF, el CRM y el dashboard se construyen sobre esta
-> base — ver [ARCHITECTURE.md](./ARCHITECTURE.md).
+Flujo: **Búsquedas** (nicho + ubicación + nº de empresas) → descubrimiento en
+fuentes reales → análisis automático de cada web (hallazgos con evidencia,
+oportunidades y puntuación heurística explicada) → **ficha de empresa** con
+mensajes de contacto (email, LinkedIn, WhatsApp) e informe comercial en PDF →
+**CRM/Pipeline** y **Dashboard**. Arquitectura y módulos en
+[ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Requisitos
 
@@ -33,6 +35,7 @@ Para producción: `npm run build && npm start`.
 | OpenStreetMap (Nominatim + Overpass) | No necesita. Recomendado `OSM_CONTACT_EMAIL` | Nombre, categoría, web, teléfono, email, dirección, horarios y redes cuando están mapeados. **No tiene valoraciones ni reseñas.** |
 | Google Places API (New) | `GOOGLE_PLACES_API_KEY` | Valoración, número de reseñas, horarios, ficha de Maps y mejor cobertura (hasta 60 resultados por búsqueda). |
 | Anthropic | `ANTHROPIC_API_KEY` (opcional) | Interpretación del análisis y redacción de mensajes. Sin clave se usan reglas. |
+| Google PageSpeed Insights | `PAGESPEED_API_KEY` (opcional) | Métricas reales de rendimiento móvil (Lighthouse) en cada análisis. Sin clave, la velocidad se estima por el tiempo de descarga del HTML y se indica así. |
 | Remitente | `OUTREACH_SENDER_NAME`, `OUTREACH_SENDER_COMPANY` (opcionales) | Firma de los mensajes y "Preparado por" de los informes. Sin ellas, los mensajes llevan «[Tu nombre]» para rellenar. |
 
 El estado de cada integración se ve en **Ajustes** dentro de la aplicación.
