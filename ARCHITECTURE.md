@@ -216,6 +216,39 @@ Must:
 - LLM (optional): interpret signals into the summary / opportunity wording
   via `generateObject`; the rules path must produce complete output alone.
 
+### Module A — as built
+
+Pipeline (`src/lib/analysis/`): `crawl.ts` (home + up to 4 booking/contact/
+services pages, 2.5 MB and 15 s per page, 60 s budget, manual redirects
+checked by the SSRF guard in `net-guard.ts`) → `extract.ts` (cheerio, pure)
+→ `collect.ts` builds `AnalysisSignals` (schema in `signals.ts`, stored in
+`Analysis.signals`) → `interpret.ts` = `findings.ts` + `opportunities.ts` +
+`score.ts` + summary → optional `llm.ts` (rewrites wording; extra
+opportunities only with a quote verified against the crawled text) →
+`index.ts` persists.
+
+- **Catalog for filters/labels:** `catalog.ts` exports `FINDINGS`,
+  `FINDING_ISSUE_LABELS` (key → label for `kind = "issue"`) and
+  `OPPORTUNITY_TYPES` (type → `{ title, serviceKey }`). Plain constants, safe
+  in client components. AI-detected opportunities use `type` `ai_<slug>`.
+- **Latest analysis:** the newest `Analysis` with `status = "completed"`
+  (by `finishedAt`). Re-analyses keep history; opportunity types the user
+  dismissed stay `dismissed`; a failed run keeps the previous `Company.score`.
+- **Score:** six factors, weights in `SCORE_WEIGHTS` (opportunities 35 %,
+  size/activity 20 %, digital gap 15 %, reachability 15 %, economic
+  potential 10 %, confidence 5 %). Closed businesses add a weight-0
+  `business_status` factor with negative points. Show `SCORE_DISCLAIMER`
+  next to the score.
+- **No internet ≠ broken website:** if the site fails at network level and
+  the server cannot reach the internet either, the analysis fails with an
+  explicit error instead of reporting the company's site as down. Sites that
+  answer 403/429 to bots get a neutral `website_blocked` finding.
+- **Env:** `PAGESPEED_API_KEY` (optional, real mobile metrics);
+  `ANALYSIS_ALLOW_PRIVATE_HOSTS=true` only for local testing.
+- **Limits stated in `signals.limitations`:** no JavaScript execution (some
+  widgets loaded by tag managers may be missed — absence findings lower their
+  confidence), no way to see review replies or call handling from outside.
+
 ## 9. Module B — company page, messages, PDF report
 
 Owns `src/app/companies/[id]/**`, `src/components/company/**`,

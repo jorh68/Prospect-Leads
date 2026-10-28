@@ -74,12 +74,15 @@ export function computeScore(
       ),
     );
   } else {
-    const proxies: string[] = [];
-    let v = 0.2;
-    if (f.reachable) (v += 0.1), proxies.push("web operativa");
-    if (f.socialPlatforms.length >= 2) (v += 0.1), proxies.push(`${f.socialPlatforms.length} redes sociales`);
-    if (s.content.wordCount > 500 || s.pages.length >= 4) (v += 0.05), proxies.push("web con contenido amplio");
-    if (s.tracking.adPixels.length > 0) (v += 0.1), proxies.push("invierte en publicidad");
+    const signals: [string, number, boolean][] = [
+      ["web operativa", 0.1, f.reachable],
+      [`${f.socialPlatforms.length} redes sociales`, 0.1, f.socialPlatforms.length >= 2],
+      ["web con contenido amplio", 0.05, s.content.wordCount > 500 || s.pages.length >= 4],
+      ["invierte en publicidad", 0.1, s.tracking.adPixels.length > 0],
+    ];
+    const present = signals.filter(([, , ok]) => ok);
+    const proxies = present.map(([label]) => label);
+    const v = 0.2 + present.reduce((n, [, w]) => n + w, 0);
     breakdown.push(
       factor(
         "size_activity",

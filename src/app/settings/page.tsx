@@ -27,6 +27,12 @@ export default function SettingsPage() {
       active: integrations.anthropic(),
       note: `Interpretación del análisis y redacción de mensajes. Sin clave se usan reglas. Modelo: ${env().ANTHROPIC_MODEL}.`,
     },
+    {
+      name: "Google PageSpeed Insights",
+      variable: "PAGESPEED_API_KEY",
+      active: integrations.pageSpeed(),
+      note: "Métricas reales de rendimiento móvil (Lighthouse) en cada análisis. Sin clave, la velocidad se estima por el tiempo de descarga del HTML.",
+    },
   ];
 
   return (

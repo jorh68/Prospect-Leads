@@ -67,6 +67,8 @@ async function runFor(companyId: string) {
   const job = await mod.enqueueAnalysis(companyId);
   expect(job).not.toBeNull();
   await mod.runAnalysisJob(job!);
+  // The worker marks the job done after the handler returns.
+  await mod.db.job.update({ where: { id: job!.id }, data: { status: "completed" } });
 }
 
 beforeAll(async () => {
