@@ -123,6 +123,14 @@ describe("companies without a usable website", () => {
     expect(r.signals.limitations[0]).toMatch(/no tiene web propia/);
   });
 
+  it("only asks for a Google Places key when none is configured", () => {
+    const missing = (configured: boolean) =>
+      run(context({ website: null, rating: null, reviewCount: null, ratingProviderConfigured: configured }), null).signals.limitations.join(" ");
+    expect(missing(false)).toMatch(/requiere GOOGLE_PLACES_API_KEY/);
+    expect(missing(true)).not.toMatch(/requiere GOOGLE_PLACES_API_KEY/);
+    expect(missing(true)).toMatch(/Google Places no tiene reseñas de esta empresa/);
+  });
+
   it("treats a Facebook page as 'no own website'", () => {
     const r = run(context({ website: "https://www.facebook.com/dentalejemplo" }), null);
     expect(r.findings.map((f) => f.key)).toContain("website_social_only");

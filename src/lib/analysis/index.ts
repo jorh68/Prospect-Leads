@@ -2,6 +2,7 @@ import "server-only";
 import type { Company, Job, Prisma, SocialProfile } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db";
+import { integrations } from "../env";
 import { errorMessage } from "../http";
 import { logActivity } from "../activity";
 import { SOCIAL_PLATFORMS, type SocialPlatform } from "../domain/constants";
@@ -51,6 +52,7 @@ function toContext(company: Company & { socialProfiles: SocialProfile[] }): Comp
     rating: company.rating,
     reviewCount: company.reviewCount,
     ratingSource: fs.success ? (fs.data.rating ?? fs.data.reviewCount ?? null) : null,
+    ratingProviderConfigured: integrations.googlePlaces(),
     openingHours:
       typeof hours === "string" || (Array.isArray(hours) && hours.every((h) => typeof h === "string"))
         ? (hours as string | string[])

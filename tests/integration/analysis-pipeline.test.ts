@@ -199,4 +199,38 @@ describe("analysis job", () => {
     expect(c.findings).toEqual([]);
     expect(c.analyses[0]!.error).toMatch(/No es un fallo de la empresa/);
   }, 30_000);
+
+  it("reports a domain the proxy cannot reach as the company's website being down", async () => {
+    // A proxy answers 502 for a domain that does not resolve: HTTPS as a failed
+    // tunnel, plain HTTP as a 502 page written by the proxy. The server itself is online.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const u = String(input);
+        if (!u.includes("muerta-ejemplo.test")) return new Response(null, { status: 204 });
+        if (u.startsWith("https:")) {
+          const tunnel = new Error("Proxy response (502) !== 200 when HTTP Tunneling");
+          throw new TypeError("fetch failed", { cause: new Error("Request was cancelled.", { cause: tunnel }) });
+        }
+        return new Response("upstream request failed", { status: 502 });
+      }),
+    );
+    // Skip past the cached "offline" connectivity check of the previous test.
+    const realNow = Date.now.bind(Date);
+    const now = vi.spyOn(Date, "now").mockImplementation(() => realNow() + 61_000);
+    const company = await createCompany({ name: "Clínica Web Muerta Ejemplo", website: "https://muerta-ejemplo.test/" });
+    try {
+      await runFor(company.id);
+    } finally {
+      now.mockRestore();
+    }
+
+    const c = await mod.db.company.findUniqueOrThrow({ where: { id: company.id }, include: { analyses: true, findings: true } });
+    expect(c.analysisStatus).toBe("completed");
+    expect(c.analyses[0]!.error).toBeNull();
+    const unreachable = c.findings.find((f) => f.key === "website_unreachable");
+    expect(unreachable).toBeDefined();
+    expect(JSON.stringify(unreachable)).toMatch(/el dominio no existe o el servidor no responde/);
+    expect(JSON.stringify(c.findings)).not.toMatch(/proxy|bloquea/i);
+  }, 30_000);
 });

@@ -26,6 +26,28 @@ export class ReportNotReadyError extends Error {
 
 const MAX_RECOMMENDATIONS = 5;
 
+const MARKUP = /[<>{}]|=\\?"|!important|class=/;
+const PAGE_URL = /https?:\/\/[^\s"'<>\\]+/g;
+const ASSET_URL = /\.(?:svg|png|jpe?g|gif|webp|css|js)(?:[?#]|$)|cdn/i;
+
+/**
+ * Evidence written for a business reader. Tool detections carry a raw code
+ * snippet ("Joinchat: …:where(.wp-block-joinchat…") that is proof in the app
+ * but noise in a client report: keep the tool name and, when there is one,
+ * the page link it points to (e.g. the Doctoralia profile).
+ */
+export function readableEvidence(evidence: string): string {
+  return evidence
+    .split(" · ")
+    .map((part) => {
+      const m = /^([^:]{2,60}): (…?.*)$/.exec(part);
+      if (!m || !MARKUP.test(m[2]!)) return part;
+      const link = [...m[2]!.matchAll(PAGE_URL)].map((u) => u[0]).find((u) => !ASSET_URL.test(u));
+      return link ? `${m[1]}: ${link}` : `${m[1]} (detectado en el código de la web)`;
+    })
+    .join(" · ");
+}
+
 /** Builds the frozen report content. Only real data from the input is used. */
 export function buildReportContent(input: ReportInput): ReportContent {
   if (!input.analysis) throw new ReportNotReadyError();
@@ -60,7 +82,7 @@ export function buildReportContent(input: ReportInput): ReportContent {
 
   const toItem = (f: OutreachInput["findings"][number]) => ({
     title: f.label,
-    evidence: f.evidence,
+    evidence: readableEvidence(f.evidence),
     evidenceUrl: f.evidenceUrl,
     interpretation: f.interpretation,
     severity: f.severity,
@@ -128,7 +150,7 @@ export function buildReportContent(input: ReportInput): ReportContent {
       id: o.id,
       title: o.title,
       problem: o.problem,
-      evidence: o.evidence,
+      evidence: readableEvidence(o.evidence),
       consequence: o.consequence,
       solution: o.solution,
       service: serviceLabel(o.serviceKey),

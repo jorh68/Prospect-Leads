@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReportContent, ReportNotReadyError, type ReportInput } from "@/lib/reports/snapshot";
+import { buildReportContent, readableEvidence, ReportNotReadyError, type ReportInput } from "@/lib/reports/snapshot";
 import { reportContentSchema } from "@/lib/reports/schema";
 import { recommendServices } from "@/lib/reports/services";
 import { deriveNextActions, isSpanishMobile, type NextActionInput } from "@/lib/reports/next-actions";
@@ -56,6 +56,26 @@ describe("buildReportContent", () => {
 
   it("requires a completed analysis", () => {
     expect(() => buildReportContent(reportInput({ analysis: null }))).toThrow(ReportNotReadyError);
+  });
+});
+
+describe("readableEvidence", () => {
+  it("replaces raw code snippets with the tool name, or the page link it points to", () => {
+    expect(readableEvidence("Joinchat: …nt-size--huge) !important;} :where(.wp-block-joinchat-button.is-layout-flex){gap: 10px;}…")).toBe(
+      "Joinchat (detectado en el código de la web)",
+    );
+    expect(
+      readableEvidence('Doctoralia: …id="zl-url" class="zl-url" href="https://www.doctoralia.es/lucia-gil-raga/dentista/valencia" rel="nofollow"…'),
+    ).toBe("Doctoralia: https://www.doctoralia.es/lucia-gil-raga/dentista/valencia");
+    expect(readableEvidence('Trustindex (Google reviews): …<img src="https://cdn.trustindex.io/assets/platform/Google/star/f.svg" alt="Goog…')).toBe(
+      "Trustindex (Google reviews) (detectado en el código de la web)",
+    );
+  });
+
+  it("keeps plain evidence untouched", () => {
+    const plain = "Formulario en https://ejemplo.es/: Nombre *, Teléfono * (botón \"Enviar\") · https://wa.me/34600000000";
+    expect(readableEvidence(plain)).toBe(plain);
+    expect(readableEvidence("Valoración 4,9/5 con 494 reseñas en Google Places.")).toBe("Valoración 4,9/5 con 494 reseñas en Google Places.");
   });
 });
 

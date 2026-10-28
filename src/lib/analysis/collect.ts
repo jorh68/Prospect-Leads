@@ -25,6 +25,8 @@ export interface CompanyContext {
   reviewCount: number | null;
   /** provider of rating/reviewCount (e.g. "google_places") */
   ratingSource: string | null;
+  /** Whether a source that provides ratings (Google Places) is configured */
+  ratingProviderConfigured?: boolean;
   openingHours: string | string[] | null;
   businessStatus: string | null;
   socials: { platform: SocialPlatform; url: string; source: string }[];
@@ -121,7 +123,11 @@ export function buildSignals(ctx: CompanyContext, site: SiteInput): AnalysisSign
     );
   }
   if (ctx.rating == null && ctx.reviewCount == null) {
-    limitations.push("Sin valoración ni número de reseñas en las fuentes (requiere GOOGLE_PLACES_API_KEY).");
+    limitations.push(
+      ctx.ratingProviderConfigured
+        ? "Sin valoración ni número de reseñas: Google Places no tiene reseñas de esta empresa o no la encontró en la búsqueda."
+        : "Sin valoración ni número de reseñas en las fuentes (requiere GOOGLE_PLACES_API_KEY).",
+    );
   }
   limitations.push("No es posible comprobar desde fuera si las reseñas se responden ni cómo se atienden llamadas y formularios.");
 
