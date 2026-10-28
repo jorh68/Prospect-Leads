@@ -62,13 +62,25 @@ export function buildOpportunities(
       impactNote: busy ? `Tiene ${ctx.reviewCount} reseñas: hay demanda que hoy no se aprovecha online.` : null,
       confidence: has("no_website") ? 0.7 : 0.8,
     });
-  } else if (has("website_unreachable") || has("website_http_error") || has("website_parked") || has("website_under_construction")) {
+  } else if (
+    has("website_unreachable") ||
+    has("website_invalid_certificate") ||
+    has("website_http_error") ||
+    has("website_parked") ||
+    has("website_under_construction")
+  ) {
     // Network failures and 5xx responses are often temporary outages; 4xx/parked pages are not.
     const transient = has("website_unreachable") || (has("website_http_error") && (s.website.httpStatus ?? 0) >= 500);
     add("website_down", {
-      problem: "La web del negocio no está operativa.",
-      evidence: ev("website_unreachable", "website_http_error", "website_parked", "website_under_construction"),
-      consequence: "Quien llega desde Google o la ficha del mapa encuentra un error o una página vacía y busca otra opción.",
+      problem: has("website_invalid_certificate")
+        ? "La web del negocio abre con un aviso de seguridad del navegador."
+        : has("website_parked")
+          ? "El dominio de la web muestra una página de dominio aparcado, no la web del negocio."
+          : "La web del negocio no está operativa.",
+      evidence: ev("website_unreachable", "website_invalid_certificate", "website_http_error", "website_parked", "website_under_construction"),
+      consequence: has("website_parked")
+        ? "Quien llega desde Google o la ficha del mapa no encuentra nada del negocio y busca otra opción."
+        : "Quien llega desde Google o la ficha del mapa encuentra un error o una página vacía y busca otra opción.",
       solution: "Recuperar o rehacer la web con lo básico para convertir: servicios, teléfono clicable, WhatsApp y formulario o reserva.",
       impact: "high",
       impactNote: transient ? "Puede ser una caída temporal: verificar antes de contactar." : null,
@@ -94,7 +106,7 @@ export function buildOpportunities(
     add("missing_online_booking", {
       problem: "No se puede reservar ni pedir cita desde la web.",
       evidence: ev("no_online_booking", "phone_only_booking"),
-      consequence: `En ${f.profile.label.toLowerCase()} muchos clientes reservan fuera del horario de atención; si solo pueden llamar, una parte reserva con la competencia.`,
+      consequence: `En ${f.profile.inSector} muchos clientes reservan fuera del horario de atención; si solo pueden llamar, una parte reserva con la competencia.`,
       solution: "Sistema de reserva online integrado en la web y en la ficha de Google, con confirmación y recordatorios automáticos para reducir ausencias.",
       impact: ["health", "beauty", "hospitality"].includes(f.profile.model) ? "high" : "medium",
       impactNote: busy ? `${ctx.reviewCount} reseñas indican un volumen de clientes en el que la reserva online ahorra muchas llamadas.` : null,

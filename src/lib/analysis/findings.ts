@@ -13,6 +13,7 @@ import type { AnalysisSignals } from "./signals";
 
 const GENERIC_HEADLINES = /^(inicio|home|bienvenid[oa]s?|welcome|portada|p[aá]gina principal|hola)\b/i;
 const FREE_EMAIL = /@(gmail|hotmail|outlook|yahoo|icloud|live|msn|aol|protonmail)\./i;
+const CERT_ERROR = "certificado HTTPS no válido";
 
 export function buildFindings(ctx: CompanyContext, s: AnalysisSignals, f: Facts, now = new Date()): FindingInput[] {
   const out: FindingInput[] = [];
@@ -61,23 +62,49 @@ export function buildFindings(ctx: CompanyContext, s: AnalysisSignals, f: Facts,
         "Quien busca el servicio en Google y compara opciones no encuentra dónde informarse ni cómo contactar fuera de la ficha del mapa; esa demanda tiende a irse a competidores con web.",
       );
     }
+  } else if (s.website.mismatch) {
+    add(
+      "website_mismatch",
+      "medium",
+      `${s.website.url}: ${s.website.mismatch}`,
+      "Quien pulsa la web desde la ficha del mapa o el directorio llega a otro negocio y no encuentra a este. Puede ser un dato antiguo de la fuente: conviene confirmarlo antes de mencionarlo. El contenido de esa web no se ha usado en el análisis.",
+      s.website.url,
+    );
+  } else if (s.content.parked) {
+    add(
+      "website_parked",
+      "high",
+      quote(s.content.parked),
+      "El dominio no muestra una web del negocio sino una página de dominio aparcado o en venta: quien llega desde Google o el mapa no encuentra nada del negocio.",
+      s.website.finalUrl,
+    );
   } else if (!f.reachable) {
     if (f.blocked) {
       add(
         "website_blocked",
         "info",
         `${s.website.url} respondió HTTP ${s.website.httpStatus} a una visita automatizada.`,
-        "La web existe pero rechaza visitas automáticas (protección anti-bots). No es necesariamente un problema para los clientes; su contenido no se ha podido revisar.",
+        s.website.httpStatus === 429
+          ? "La web limita las visitas automáticas («demasiadas peticiones»); suele ser temporal, así que conviene volver a analizarla más tarde. No es un problema para los clientes."
+          : "La web existe pero rechaza visitas automáticas (protección anti-bots). No es necesariamente un problema para los clientes; su contenido no se ha podido revisar.",
         s.website.url,
       );
     } else if (s.website.httpStatus != null) {
       add(
         "website_http_error",
         "high",
-        `${s.website.url} respondió con error HTTP ${s.website.httpStatus}.`,
+        `${s.website.url} respondió con error ${s.website.error ?? `HTTP ${s.website.httpStatus}`}.`,
         s.website.httpStatus >= 500
           ? "Los clientes que llegan desde Google o la ficha del mapa encuentran una página de error y se van. Un error del servidor puede ser temporal: conviene comprobarlo de nuevo antes de contactar."
           : "Los clientes que llegan desde Google o la ficha del mapa encuentran una página de error y se van.",
+        s.website.url,
+      );
+    } else if (s.website.error === CERT_ERROR) {
+      add(
+        "website_invalid_certificate",
+        "high",
+        `${s.website.url}: el certificado HTTPS no corresponde al dominio o no es válido.`,
+        "El navegador muestra un aviso de seguridad a pantalla completa antes de abrir la web; la mayoría de visitantes no pasa de ahí y el negocio parece descuidado o inseguro.",
         s.website.url,
       );
     } else {
@@ -91,11 +118,19 @@ export function buildFindings(ctx: CompanyContext, s: AnalysisSignals, f: Facts,
     }
   }
 
+  if (f.reachable && s.website.listedUrlError) {
+    const { url, status } = s.website.listedUrlError;
+    add(
+      "listed_url_broken",
+      "medium",
+      `La web que figura en su ficha (${url}) responde con error HTTP ${status}; la página de inicio (${s.website.finalUrl}) sí funciona.`,
+      "Quien pulsa «Sitio web» en la ficha del mapa o del directorio llega a una página de error; parte de esas visitas se pierde antes de encontrar la web buena.",
+      url,
+    );
+  }
+
   if (f.reachable) {
     const home = s.website.finalUrl;
-    if (s.content.parked) {
-      add("website_parked", "high", quote(s.content.parked), "El dominio no muestra una web del negocio sino una página de dominio aparcado o en venta.", home);
-    }
     if (s.content.underConstruction) {
       add(
         "website_under_construction",
@@ -378,7 +413,7 @@ export function buildFindings(ctx: CompanyContext, s: AnalysisSignals, f: Facts,
         "no_online_booking",
         "high",
         `Ningún sistema de reserva online (widget, enlace a Doctoralia, Calendly, Booksy, TheFork… ni formulario de cita) ${checked}.`,
-        `En ${f.profile.label.toLowerCase()} el cliente espera reservar en el momento; si tiene que llamar y no le cogen, reserva en otro sitio.`,
+        `En ${f.profile.inSector} el cliente espera reservar en el momento; si tiene que llamar y no le cogen, reserva en otro sitio.`,
         home,
       );
     }

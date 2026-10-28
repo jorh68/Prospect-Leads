@@ -6,6 +6,7 @@ import { SCORE_WEIGHTS } from "@/lib/analysis/score";
 import { analysisSignalsSchema } from "@/lib/analysis/signals";
 import { findingInputSchema, opportunityInputSchema, scoreBreakdownSchema } from "@/lib/domain/types";
 import { SERVICE_KEYS } from "@/lib/domain/constants";
+import { nameTokens } from "@/lib/analysis/identity";
 import { context, crawlOf, dentalCrawl, fisioCrawl, page } from "./helpers";
 
 const NOW = new Date("2026-10-28T12:00:00Z");
@@ -156,6 +157,72 @@ describe("companies without a usable website", () => {
     expect(keys).toContain("website_blocked");
     expect(r.findings.find((f) => f.key === "website_blocked")!.kind).toBe("neutral");
     expect(r.opportunities.map((o) => o.type)).not.toContain("website_down");
+  });
+});
+
+describe("problems that only showed up with real listings", () => {
+  // Fictional party-planning site, as found behind a stale clinic listing.
+  const partyHtml = `<html lang="es"><head><title>Fiestas Ejemplo | Cumpleaños infantiles</title></head><body>
+    <h1>El cumpleaños de tu peque sin caos</h1>
+    <p>${"Organizamos fiestas infantiles con animadores, castillos hinchables, decoración temática, tartas y meriendas para que tú solo disfrutes del día. ".repeat(5)}</p>
+    <a href="https://wa.me/34600000000">Reservar fecha</a> <a href="mailto:fiestasejemplo@gmail.com">Escríbenos</a>
+    <a href="https://instagram.com/fiestasejemplo">Instagram</a></body></html>`;
+  const otherBusinessSite = () => crawlOf([page("https://otro-negocio.test/", partyHtml, "home")]);
+
+  it("does not analyse a website that belongs to another business", () => {
+    const ctx = context({ name: "Clínica Dental Dra. Marta Ejemplar", website: "https://otro-negocio.test/", email: "info@dentalmarta.test" });
+    const r = run(ctx, otherBusinessSite());
+    const keys = r.findings.map((f) => f.key);
+    expect(r.signals.website.mismatch).toMatch(/no menciona/);
+    expect(r.signals.website.reachable).toBe(false);
+    expect(keys).toContain("website_mismatch");
+    // Nothing from the other business's site is attributed to the clinic.
+    expect(keys).not.toEqual(expect.arrayContaining(["no_online_booking", "has_whatsapp", "free_email_domain"]));
+    expect(r.signals.socials).toEqual([]);
+    expect(r.signals.contact.emails).toEqual([]);
+    expect(r.opportunities.map((o) => o.type)).not.toContain("website_down");
+    expect(r.summary).toMatch(/parece de otro negocio/);
+    expect(analysisSignalsSchema.safeParse(r.signals).success).toBe(true);
+  });
+
+  it("keeps a site that shows the company's name, phone or sector", () => {
+    expect(run().signals.website.mismatch).toBeNull();
+    expect(nameTokens("Clínica Dental Reyes 9", "Madrid")).toEqual(["reyes"]);
+    const sameName = context({ name: "Fiestas Ejemplo", niche: "Clínicas dentales", website: "https://otro-negocio.test/" });
+    expect(run(sameName, otherBusinessSite()).signals.website.mismatch).toBeNull();
+  });
+
+  it("reports a dead listing link but analyses the working home page", () => {
+    const crawl = { ...dentalCrawl(), listedUrlError: { url: "https://dental-ejemplo.test/sede-centro.jsp", status: 404 } };
+    const r = run(context(), crawl);
+    const keys = r.findings.map((f) => f.key);
+    expect(keys).toContain("listed_url_broken");
+    expect(keys).not.toContain("website_http_error");
+    expect(r.opportunities.map((o) => o.type)).not.toContain("website_down");
+    expect(r.signals.website.reachable).toBe(true);
+  });
+
+  it("reports a parked domain without auditing the parking page as if it were the clinic's site", () => {
+    const html = `<!doctype html><html><head><script>window.LANDER_SYSTEM="PW"</script></head><body><div id="root"></div></body></html>`;
+    const r = run(context(), crawlOf([page("https://dental-ejemplo.test/lander", html, "home")]));
+    const keys = r.findings.map((f) => f.key);
+    expect(keys).toContain("website_parked");
+    expect(keys).not.toEqual(expect.arrayContaining(["no_clear_cta"]));
+    expect(keys).not.toContain("not_mobile_friendly");
+    expect(keys).not.toContain("no_online_booking");
+    expect(r.opportunities.map((o) => o.type)).toContain("website_down");
+    expect(r.summary).toMatch(/aparcado/);
+  });
+
+  it("names an invalid HTTPS certificate instead of saying the site is down", () => {
+    const home = page("https://dental-ejemplo.test/", null, "home", { error: "certificado HTTPS no válido" });
+    const r = run(context(), crawlOf([home], null));
+    const keys = r.findings.map((f) => f.key);
+    expect(keys).toContain("website_invalid_certificate");
+    expect(keys).not.toContain("website_unreachable");
+    const down = r.opportunities.find((o) => o.type === "website_down")!;
+    expect(down.problem).toMatch(/aviso de seguridad/);
+    expect(down.impactNote).toBeNull();
   });
 });
 

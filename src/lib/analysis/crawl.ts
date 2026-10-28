@@ -40,6 +40,11 @@ export interface CrawlResult {
   redirectsToHttps: boolean | null;
   /** The site answered but refuses automated visits (403/429/challenge) */
   blocked: boolean;
+  /**
+   * The URL on record is a dead inner page (404/410) but the site's home
+   * works; the crawl continued from the home page.
+   */
+  listedUrlError: { url: string; status: number } | null;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -113,6 +118,21 @@ function networkErrorMessage(e: unknown, timeoutMs: number): string {
   return `no se pudo conectar (${code || (e as Error)?.message || "error de red"})`;
 }
 
+const META_REFRESH = /<meta[^>]+http-equiv=["']?refresh["']?[^>]+content=["']?\s*\d+\s*;\s*url=['"]?([^"'>\s]+)/i;
+const JS_REDIRECT = /location(?:\.href)?\s*=\s*["']([^"']+)["']|location\.replace\(\s*["']([^"']+)["']\s*\)/i;
+
+/**
+ * Target of a stub page that only redirects with a meta refresh or a line of
+ * JavaScript (common on parked domains and old hosting). Large pages are real
+ * content, so they are never treated as redirects.
+ */
+export function softRedirectTarget(html: string): string | null {
+  if (html.length > 4000) return null;
+  const m = META_REFRESH.exec(html) ?? JS_REDIRECT.exec(html);
+  const target = m?.[1] ?? m?.[2] ?? null;
+  return target && !/^(javascript|data):/i.test(target) ? target : null;
+}
+
 /** GET a page following redirects manually (each hop checked by the SSRF guard). */
 export async function fetchPage(url: string, kind: PageKind, timeoutMs = CRAWL_LIMITS.pageTimeoutMs): Promise<FetchedPage> {
   const started = Date.now();
@@ -138,6 +158,11 @@ export async function fetchPage(url: string, kind: PageKind, timeoutMs = CRAWL_L
       const bytes = isHtml ? await readLimited(res, CRAWL_LIMITS.maxBytes) : null;
       if (!isHtml) await res.body?.cancel().catch(() => {});
       const html = bytes ? decodeHtml(bytes, charsetOf(contentType, bytes)) : null;
+      const soft = res.ok && html ? softRedirectTarget(html) : null;
+      if (soft) {
+        current = new URL(soft, current).toString();
+        continue;
+      }
       return {
         ...base,
         finalUrl: current,
@@ -249,8 +274,22 @@ export async function crawlSite(startUrl: string): Promise<CrawlResult> {
     }
   }
 
+  // Listings often keep an old inner URL (a chain's branch page, a moved
+  // section). A 404 there says nothing about the site as a whole.
+  let listedUrlError: CrawlResult["listedUrlError"] = null;
+  if (!home.html && (home.status === 404 || home.status === 410)) {
+    const root = siteRoot(home.finalUrl);
+    if (root && normalizePath(root) !== normalizePath(home.finalUrl)) {
+      const rootPage = await fetchPage(root, "home");
+      if (rootPage.html) {
+        listedUrlError = { url: startUrl, status: home.status };
+        home = rootPage;
+      }
+    }
+  }
+
   const blocked = looksBlocked(home);
-  if (!home.html) return { home, pages: [home], extracts: [], redirectsToHttps: null, blocked };
+  if (!home.html) return { home, pages: [home], extracts: [], redirectsToHttps: null, blocked, listedUrlError };
 
   const homeExtract = extractPage(home.html, home.finalUrl);
   const pages: FetchedPage[] = [home];
@@ -268,7 +307,15 @@ export async function crawlSite(startUrl: string): Promise<CrawlResult> {
     ? true
     : await checkHttpsRedirect(home.finalUrl);
 
-  return { home, pages, extracts, redirectsToHttps, blocked };
+  return { home, pages, extracts, redirectsToHttps, blocked, listedUrlError };
+}
+
+function siteRoot(u: string): string | null {
+  try {
+    return `${new URL(u).origin}/`;
+  } catch {
+    return null;
+  }
 }
 
 // ── Connectivity of this server ──

@@ -103,7 +103,7 @@ export async function runAnalysisJob(job: Job): Promise<void> {
     let opportunities = result.opportunities;
     let generator: "rules" | "llm" = "rules";
     try {
-      const refined = await refineWithLlm(ctx, signals, result, crawledText(crawl));
+      const refined = await refineWithLlm(ctx, signals, result, crawledText(signals.website.mismatch ? null : crawl));
       if (refined) {
         summary = refined.summary;
         opportunities = refined.opportunities;
@@ -115,7 +115,7 @@ export async function runAnalysisJob(job: Job): Promise<void> {
     }
 
     await setJobProgress(job.id, { step: "save" });
-    await persist({ company, analysisId: analysis.id, crawl, signals, result: { ...result, summary, opportunities }, generator });
+    await persist({ company, analysisId: analysis.id, signals, result: { ...result, summary, opportunities }, generator });
     console.info(
       `[analysis] ${company.name}: ${result.score.total}/100, ${opportunities.length} oportunidad(es), ${result.findings.length} hallazgo(s) [${generator}]`,
     );
@@ -139,12 +139,11 @@ export async function runAnalysisJob(job: Job): Promise<void> {
 async function persist(params: {
   company: Company & { socialProfiles: SocialProfile[] };
   analysisId: string;
-  crawl: CrawlResult | null;
   signals: AnalysisSignals;
   result: ReturnType<typeof interpret>;
   generator: "rules" | "llm";
 }) {
-  const { company, analysisId, crawl, signals, result, generator } = params;
+  const { company, analysisId, signals, result, generator } = params;
   const companyId = company.id;
 
   // Keep the user's "dismissed" decisions across re-analyses.
@@ -237,7 +236,7 @@ async function persist(params: {
       });
     }
 
-    if (crawl?.home.html) {
+    if (signals.website.reachable) {
       const payload = {
         finalUrl: signals.website.finalUrl,
         pages: signals.pages.map((p) => ({ url: p.url, kind: p.kind, status: p.status, title: p.title })),

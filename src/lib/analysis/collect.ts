@@ -6,6 +6,7 @@ import type { SocialPlatform } from "../domain/constants";
 import { extractDomain, isOwnWebsite, normalizeUrl } from "../text";
 import type { CrawlResult } from "./crawl";
 import { dedupePhones, type PageExtract } from "./extract";
+import { siteIdentityMismatch } from "./identity";
 import type { AnalysisSignals, PageSpeedSignal, VendorHit } from "./signals";
 import type { VendorGroup } from "./vendors";
 import { ANALYSIS_VERSION } from "./version";
@@ -58,16 +59,25 @@ function pickValueProposition(home: PageExtract | undefined, companyName: string
   return title && title.toLowerCase() !== companyName.toLowerCase() ? title : null;
 }
 
+/** " («Error de la base de datos»)" — what the visitor sees on an error page. */
+function errorPageTitle(body: string | null): string {
+  const title = body ? /<title[^>]*>([^<]{3,120})<\/title>/i.exec(body)?.[1]?.replace(/\s+/g, " ").trim() : null;
+  return title ? ` («${title}»)` : "";
+}
+
 export function buildSignals(ctx: CompanyContext, site: SiteInput): AnalysisSignals {
   const rawUrl = normalizeUrl(ctx.website);
   const provided = rawUrl != null && isOwnWebsite(rawUrl);
   const crawl = provided ? site.crawl : null;
-  const extracts = crawl?.extracts ?? [];
+  // A site that belongs to another business is not evidence about this one:
+  // none of its content, contacts or gaps are used.
+  const mismatch = crawl?.home.html && !crawl.extracts[0]?.hints.parked ? siteIdentityMismatch(ctx, crawl.extracts) : null;
+  const extracts = mismatch ? [] : (crawl?.extracts ?? []);
   const home = extracts[0];
   const limitations: string[] = [];
 
   const finalUrl = crawl?.home.finalUrl ?? null;
-  const reachable = Boolean(crawl?.home.html);
+  const reachable = Boolean(crawl?.home.html) && !mismatch;
   const https = finalUrl ? finalUrl.startsWith("https:") : null;
 
   const ctas = extracts.flatMap((p) => p.ctas);
@@ -89,11 +99,18 @@ export function buildSignals(ctx: CompanyContext, site: SiteInput): AnalysisSign
 
   if (!provided) {
     limitations.push("La empresa no tiene web propia registrada: el análisis se basa en los datos de las fuentes.");
+  } else if (mismatch) {
+    limitations.push("La web registrada no parece de este negocio, así que su contenido no se ha usado en el análisis.");
   } else if (!reachable) {
     limitations.push("No se pudo leer la web: los apartados de contenido, formularios y herramientas no se han podido revisar.");
   } else {
     limitations.push(
       `Se revisaron ${extracts.length} página(s) de la web sin ejecutar JavaScript: herramientas que se cargan solo con JavaScript o tras aceptar cookies pueden no detectarse.`,
+    );
+  }
+  if (crawl?.listedUrlError) {
+    limitations.push(
+      `La dirección registrada (${crawl.listedUrlError.url}) da error ${crawl.listedUrlError.status}; se analizó la página de inicio del mismo dominio.`,
     );
   }
   if (reachable && !site.pageSpeed) {
@@ -115,16 +132,18 @@ export function buildSignals(ctx: CompanyContext, site: SiteInput): AnalysisSign
       url: provided ? rawUrl : (rawUrl ?? null),
       finalUrl,
       reachable,
-      blocked: crawl?.blocked ?? false,
+      blocked: !mismatch && (crawl?.blocked ?? false),
       httpStatus: crawl?.home.status ?? null,
       https,
       redirectsToHttps: crawl?.redirectsToHttps ?? null,
-      error: crawl?.home.error ?? null,
+      error: crawl?.home.error ? `${crawl.home.error}${errorPageTitle(crawl.home.errorBody)}` : null,
       loadTimeMs: crawl?.home.loadTimeMs ?? null,
       pageBytes: crawl?.home.bytes ?? null,
       platform,
+      listedUrlError: crawl?.listedUrlError ?? null,
+      mismatch,
     },
-    pages: (crawl?.pages ?? []).map((p) => ({
+    pages: (mismatch ? [crawl!.home] : (crawl?.pages ?? [])).map((p) => ({
       url: p.finalUrl,
       kind: p.kind,
       status: p.status,

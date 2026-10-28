@@ -95,14 +95,16 @@ export function computeScore(
 
   // 3. Digital gap: share of the basic toolkit that is missing.
   if (!f.hasOwnSite || !f.reachable) {
-    const known = f.blocked;
+    const known = f.blocked || Boolean(s.website.mismatch);
     breakdown.push(
       factor(
         "digital_gap",
         "Margen de mejora digital",
         known ? 0.5 : 1,
         known
-          ? "La web bloquea el análisis: margen desconocido, se asigna un valor neutro (50 %)."
+          ? s.website.mismatch
+            ? "La web registrada parece de otro negocio: margen desconocido, se asigna un valor neutro (50 %)."
+            : "La web bloquea el análisis: margen desconocido, se asigna un valor neutro (50 %)."
           : "Sin web operativa: falta todo el kit digital básico.",
       ),
     );

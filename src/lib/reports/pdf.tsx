@@ -62,7 +62,7 @@ const s = StyleSheet.create({
 function Section({ n, title, children, breakable = true }: { n: number; title: string; children: ReactNode; breakable?: boolean }) {
   return (
     <View style={s.section} wrap={breakable}>
-      <View style={s.h2Row} minPresenceAhead={60}>
+      <View style={s.h2Row} minPresenceAhead={140}>
         <Text style={s.h2Num}>{String(n).padStart(2, "0")}</Text>
         <Text style={s.h2}>{title}</Text>
       </View>

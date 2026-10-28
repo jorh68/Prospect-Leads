@@ -18,7 +18,9 @@ const schema = z.object({
   /** Comma-separated list of Overpass endpoints, tried in order. */
   OVERPASS_URLS: z
     .string()
-    .default("https://overpass-api.de/api/interpreter,https://overpass.private.coffee/api/interpreter"),
+    .default(
+      "https://overpass-api.de/api/interpreter,https://maps.mail.ru/osm/tools/overpass/api/interpreter,https://overpass.private.coffee/api/interpreter",
+    ),
 
   // Optional LLM for interpretation and message writing.
   ANTHROPIC_API_KEY: z.string().trim().optional(),
