@@ -24,6 +24,12 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().trim().optional(),
   ANTHROPIC_MODEL: z.string().trim().default("claude-opus-5-5"),
 
+  // Website analysis (module A)
+  /** Google PageSpeed Insights API key: adds real mobile performance metrics (Lighthouse). */
+  PAGESPEED_API_KEY: z.string().trim().optional(),
+  /** Development/testing only: allow crawling localhost and private networks. */
+  ANALYSIS_ALLOW_PRIVATE_HOSTS: z.stringbool().default(false),
+
   // Worker tuning
   JOB_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
 });
@@ -55,4 +61,5 @@ export function overpassUrls(): string[] {
 export const integrations = {
   googlePlaces: () => Boolean(env().GOOGLE_PLACES_API_KEY),
   anthropic: () => Boolean(env().ANTHROPIC_API_KEY),
+  pageSpeed: () => Boolean(env().PAGESPEED_API_KEY),
 };
