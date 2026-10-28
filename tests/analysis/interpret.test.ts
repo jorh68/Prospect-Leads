@@ -1,0 +1,169 @@
+import { describe, expect, it } from "vitest";
+import { buildSignals } from "@/lib/analysis/collect";
+import { interpret } from "@/lib/analysis/interpret";
+import { FINDINGS, OPPORTUNITY_TYPES } from "@/lib/analysis/catalog";
+import { SCORE_WEIGHTS } from "@/lib/analysis/score";
+import { analysisSignalsSchema } from "@/lib/analysis/signals";
+import { findingInputSchema, opportunityInputSchema, scoreBreakdownSchema } from "@/lib/domain/types";
+import { SERVICE_KEYS } from "@/lib/domain/constants";
+import { context, crawlOf, dentalCrawl, fisioCrawl, page } from "./helpers";
+
+const NOW = new Date("2026-10-28T12:00:00Z");
+
+function run(ctx = context(), crawl: ReturnType<typeof dentalCrawl> | null = dentalCrawl()) {
+  const signals = buildSignals(ctx, { crawl, pageSpeed: null, pageSpeedError: null });
+  return { signals, ...interpret(ctx, signals, NOW) };
+}
+
+const fisioCtx = context({
+  name: "Fisioterapia Ejemplo",
+  niche: "Fisioterapeutas",
+  website: "https://fisio-ejemplo.test/",
+  city: "Valencia",
+  rating: 4.8,
+  reviewCount: 212,
+  ratingSource: "google_places",
+});
+
+describe("interpretation of a clinic that books by phone", () => {
+  const r = run();
+  const keys = r.findings.map((f) => f.key);
+  const types = r.opportunities.map((o) => o.type);
+
+  it("produces signals that match the stored schema", () => {
+    expect(analysisSignalsSchema.safeParse(r.signals).success).toBe(true);
+  });
+
+  it("detects the real gaps with literal evidence", () => {
+    expect(keys).toEqual(
+      expect.arrayContaining(["phone_only_booking", "no_online_booking", "no_whatsapp", "no_clear_cta", "long_form", "unclear_value_proposition", "outdated_site"]),
+    );
+    const phoneOnly = r.findings.find((f) => f.key === "phone_only_booking")!;
+    expect(phoneOnly.evidence).toContain("Para pedir cita llámenos al 912 345 678");
+    expect(phoneOnly.interpretation).toBeTruthy();
+  });
+
+  it("does not claim what it cannot see", () => {
+    expect(keys).not.toContain("no_https");
+    expect(keys).not.toContain("not_mobile_friendly");
+    expect(keys).not.toContain("low_rating"); // no review data at all
+    expect(keys).toContain("no_review_data");
+    expect(types).not.toContain("review_generation");
+  });
+
+  it("turns findings into opportunities for the right services", () => {
+    expect(types).toEqual(expect.arrayContaining(["manual_phone_booking", "missing_online_booking", "paid_traffic_leak", "missing_whatsapp"]));
+    const booking = r.opportunities.find((o) => o.type === "missing_online_booking")!;
+    expect(booking.serviceKey).toBe("online_booking");
+    expect(booking.impact).toBe("high");
+    // A tag manager could inject a widget we can't see: confidence is lowered.
+    expect(booking.confidence).toBeLessThan(0.7);
+  });
+
+  it("orders opportunities by impact × confidence", () => {
+    const w = r.opportunities.map((o) => ({ high: 1, medium: 0.6, low: 0.3 })[o.impact] * o.confidence);
+    expect([...w].sort((a, b) => b - a)).toEqual(w);
+  });
+
+  it("writes a summary based on the facts", () => {
+    expect(r.summary).toContain("Clínica Dental Ejemplo");
+    expect(r.summary).toContain("WordPress");
+    expect(r.summary).toMatch(/No se detecta reserva online, WhatsApp, chat ni una llamada a la acción clara/);
+    expect(r.summary).toContain(`${r.score.total}/100`);
+  });
+});
+
+describe("interpretation of a well-equipped clinic", () => {
+  const r = run(fisioCtx, fisioCrawl());
+  const keys = r.findings.map((f) => f.key);
+
+  it("recognises the tools it already uses", () => {
+    expect(keys).toEqual(
+      expect.arrayContaining(["has_online_booking", "has_whatsapp", "has_crm_marketing", "has_clear_cta", "good_rating", "many_reviews", "has_review_widget"]),
+    );
+    expect(keys).not.toContain("no_online_booking");
+    expect(keys).not.toContain("no_contact_form"); // books through Doctoralia, HubSpot can render forms
+  });
+
+  it("finds few opportunities and scores lower than the clinic with gaps", () => {
+    expect(r.opportunities.length).toBeLessThanOrEqual(1);
+    expect(r.score.total).toBeLessThan(run().score.total);
+  });
+});
+
+describe("score", () => {
+  it("is explainable: six factors whose weights sum to 1 and whose points add up to the total", () => {
+    for (const r of [run(), run(fisioCtx, fisioCrawl()), run(context({ website: null }), null)]) {
+      expect(scoreBreakdownSchema.safeParse(r.score.breakdown).success).toBe(true);
+      const weights = r.score.breakdown.reduce((n, f) => n + f.weight, 0);
+      expect(weights).toBeCloseTo(1, 5);
+      expect(r.score.breakdown.map((f) => f.factor)).toEqual(Object.keys(SCORE_WEIGHTS));
+      const points = r.score.breakdown.reduce((n, f) => n + f.points, 0);
+      expect(Math.abs(points - r.score.total)).toBeLessThanOrEqual(1);
+      expect(r.score.total).toBeGreaterThanOrEqual(0);
+      expect(r.score.total).toBeLessThanOrEqual(100);
+      for (const f of r.score.breakdown) expect(f.explanation.length).toBeGreaterThan(10);
+    }
+  });
+
+  it("drops to zero for a permanently closed business, with the reason in the breakdown", () => {
+    const r = run(context({ businessStatus: "closed_permanently" }));
+    expect(r.score.total).toBe(0);
+    expect(r.opportunities).toEqual([]);
+    expect(r.score.breakdown.at(-1)).toMatchObject({ factor: "business_status", weight: 0 });
+  });
+});
+
+describe("companies without a usable website", () => {
+  it("analyses a company with no website from source data", () => {
+    const r = run(context({ website: null, rating: 4.1, reviewCount: 9, ratingSource: "google_places" }), null);
+    expect(r.findings.map((f) => f.key)).toEqual(expect.arrayContaining(["no_website", "few_reviews"]));
+    expect(r.opportunities.map((o) => o.type)).toEqual(expect.arrayContaining(["no_website", "review_generation"]));
+    expect(r.signals.limitations[0]).toMatch(/no tiene web propia/);
+  });
+
+  it("treats a Facebook page as 'no own website'", () => {
+    const r = run(context({ website: "https://www.facebook.com/dentalejemplo" }), null);
+    expect(r.findings.map((f) => f.key)).toContain("website_social_only");
+  });
+
+  it("reports an unreachable site without inventing content findings", () => {
+    const crawl = crawlOf([page("https://dental-ejemplo.test/", null, "home")], null);
+    const r = run(context(), crawl);
+    const keys = r.findings.map((f) => f.key);
+    expect(keys).toContain("website_unreachable");
+    expect(keys).not.toContain("no_whatsapp");
+    expect(keys).not.toContain("no_contact_form");
+    const down = r.opportunities.find((o) => o.type === "website_down")!;
+    expect(down.impactNote).toMatch(/temporal/);
+  });
+
+  it("does not blame the company when its site blocks bots", () => {
+    const blocked = { ...page("https://dental-ejemplo.test/", null, "home", { status: 403, error: "HTTP 403", networkError: false }) };
+    const r = run(context(), { ...crawlOf([blocked], null), blocked: true });
+    const keys = r.findings.map((f) => f.key);
+    expect(keys).toContain("website_blocked");
+    expect(r.findings.find((f) => f.key === "website_blocked")!.kind).toBe("neutral");
+    expect(r.opportunities.map((o) => o.type)).not.toContain("website_down");
+  });
+});
+
+describe("contracts with other modules", () => {
+  const all = [run(), run(fisioCtx, fisioCrawl()), run(context({ website: null, reviewCount: 3, rating: 3.2 }), null)];
+
+  it("every finding and opportunity matches the shared zod schemas and the catalog", () => {
+    for (const r of all) {
+      for (const f of r.findings) {
+        expect(findingInputSchema.safeParse(f).success).toBe(true);
+        expect(f.label).toBe(FINDINGS[f.key as keyof typeof FINDINGS].label);
+        expect(f.evidence.length).toBeGreaterThan(5);
+      }
+      for (const o of r.opportunities) {
+        expect(opportunityInputSchema.safeParse(o).success).toBe(true);
+        expect(SERVICE_KEYS).toContain(o.serviceKey);
+        expect(OPPORTUNITY_TYPES[o.type as keyof typeof OPPORTUNITY_TYPES].serviceKey).toBeDefined();
+        expect(o.evidence.length).toBeGreaterThan(5);
+      }
+    }
+  });
+});
