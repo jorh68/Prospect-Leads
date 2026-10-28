@@ -30,6 +30,35 @@ npm run dev                 # http://localhost:3000
 
 Para producción: `npm run build && npm start`.
 
+## Acceso con contraseña
+
+Con `APP_PASSWORD` definida, la aplicación pide esa contraseña antes de
+mostrar cualquier página, acción o API (`src/proxy.ts`). La sesión dura 30
+días en una cookie firmada; cambiar la contraseña (o `AUTH_SECRET`) cierra
+todas las sesiones. Sin `APP_PASSWORD` la app queda abierta en desarrollo y
+**bloqueada en producción**. `/api/health` es la única ruta pública.
+
+## Publicar en internet (Railway)
+
+La app se publica como un único contenedor (`Dockerfile`, `railway.json`):
+servidor Next.js + worker de trabajos en el mismo proceso + SQLite en un
+volumen persistente montado en `/data`. Debe haber **una sola instancia**
+(SQLite y el worker en memoria no admiten réplicas).
+
+1. Proyecto en Railway con un servicio desplegado desde este repositorio
+   (o `railway up`).
+2. Volumen montado en `/data` (la base de datos es
+   `file:/data/prospect-leads.db`, valor por defecto del `Dockerfile`).
+3. Variables del servicio: `APP_PASSWORD` (obligatoria), `AUTH_SECRET`
+   (recomendada, valor aleatorio largo), `GOOGLE_PLACES_API_KEY`,
+   `OSM_CONTACT_EMAIL` y el resto de claves opcionales de `.env.example`.
+   Las claves solo se guardan en el panel de Railway, nunca en el repositorio.
+4. Dominio público en *Settings → Networking → Generate domain*.
+
+Al arrancar, el contenedor aplica las migraciones pendientes
+(`prisma migrate deploy`). Railway comprueba `/api/health` antes de dar el
+despliegue por bueno.
+
 ## Fuentes de datos y claves
 
 | Fuente | Clave | Qué aporta |
