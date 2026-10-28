@@ -24,6 +24,10 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().trim().optional(),
   ANTHROPIC_MODEL: z.string().trim().default("claude-opus-5-5"),
 
+  // Outreach: how messages are signed and who reports are "prepared by".
+  OUTREACH_SENDER_NAME: z.string().trim().optional(),
+  OUTREACH_SENDER_COMPANY: z.string().trim().optional(),
+
   // Worker tuning
   JOB_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
 });
