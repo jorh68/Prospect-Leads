@@ -2,6 +2,7 @@ import "server-only";
 import type { Company, Job, Prisma, SocialProfile } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db";
+import { integrations } from "../env";
 import { errorMessage } from "../http";
 import { logActivity } from "../activity";
 import { SOCIAL_PLATFORMS, type SocialPlatform } from "../domain/constants";
@@ -51,6 +52,7 @@ function toContext(company: Company & { socialProfiles: SocialProfile[] }): Comp
     rating: company.rating,
     reviewCount: company.reviewCount,
     ratingSource: fs.success ? (fs.data.rating ?? fs.data.reviewCount ?? null) : null,
+    ratingProviderConfigured: integrations.googlePlaces(),
     openingHours:
       typeof hours === "string" || (Array.isArray(hours) && hours.every((h) => typeof h === "string"))
         ? (hours as string | string[])
@@ -84,6 +86,11 @@ export async function runAnalysisJob(job: Job): Promise<void> {
     if (url && isOwnWebsite(url)) {
       await setJobProgress(job.id, { step: "crawl", url });
       crawl = await crawlSite(url);
+      if (crawl.home.proxyRefused) {
+        throw new AnalysisError(
+          `La red de este servidor no permite conectar con ${extractDomain(url) ?? url} (lo bloquea un proxy), así que no se puede revisar la web. No es un fallo de la empresa: vuelve a lanzar el análisis desde una red con acceso.`,
+        );
+      }
       if (crawl.home.networkError && !(await hasInternetAccess())) {
         throw new AnalysisError(
           "El servidor no tiene acceso a internet, así que no se puede revisar la web. Vuelve a lanzar el análisis cuando haya conexión.",

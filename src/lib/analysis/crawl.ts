@@ -29,6 +29,11 @@ export interface FetchedPage {
   error: string | null;
   /** Network-level failure (DNS, TLS, timeout…), as opposed to an HTTP answer */
   networkError: boolean;
+  /**
+   * A proxy between this server and the site refused the request (network
+   * policy, corporate proxy). Says nothing about the site itself.
+   */
+  proxyRefused?: boolean;
   /** Start of the body of an error response (to recognise anti-bot pages) */
   errorBody: string | null;
 }
@@ -107,6 +112,33 @@ async function readLimited(res: Response, maxBytes: number): Promise<Uint8Array>
   return out;
 }
 
+/** Status an outbound proxy answered to the CONNECT tunnel, found in the error's cause chain. */
+function proxyTunnelStatus(e: unknown): number | null {
+  for (let c: unknown = e, depth = 0; c && depth < 5; c = (c as { cause?: unknown }).cause, depth++) {
+    const m = /Proxy response \((\d{3})\)/.exec((c as Error).message ?? "");
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
+/** A plain-HTTP answer written by a proxy (policy block, auth required) rather than by the site. */
+function isProxyAnswer(res: Response): boolean {
+  return res.status === 407 || res.headers.has("x-proxy-error") || res.headers.has("x-squid-error");
+}
+
+/**
+ * Only 403/407 mean the proxy itself refused (network policy, auth). A 5xx is
+ * the proxy reporting that it could not reach the site (domain that does not
+ * resolve, host down): a real problem with the website.
+ */
+function isProxyRefusalStatus(status: number) {
+  return status === 403 || status === 407;
+}
+
+function proxyRefusedMessage(status: number) {
+  return `la red de este servidor no permite conectar con esta web (proxy, HTTP ${status})`;
+}
+
 function networkErrorMessage(e: unknown, timeoutMs: number): string {
   if (e instanceof DOMException && e.name === "TimeoutError") return `sin respuesta tras ${Math.round(timeoutMs / 1000)} s`;
   const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
@@ -147,6 +179,10 @@ export async function fetchPage(url: string, kind: PageKind, timeoutMs = CRAWL_L
         signal: AbortSignal.timeout(timeoutMs),
         cache: "no-store",
       });
+      if (isProxyAnswer(res)) {
+        await res.body?.cancel().catch(() => {});
+        return { ...base, finalUrl: current, status: null, html: null, bytes: null, loadTimeMs: null, error: proxyRefusedMessage(res.status), networkError: true, proxyRefused: true, errorBody: null };
+      }
       const location = res.headers.get("location");
       if (res.status >= 300 && res.status < 400 && location) {
         await res.body?.cancel().catch(() => {});
@@ -178,6 +214,8 @@ export async function fetchPage(url: string, kind: PageKind, timeoutMs = CRAWL_L
     return { ...base, finalUrl: current, status: null, html: null, bytes: null, loadTimeMs: null, error: "demasiadas redirecciones", networkError: false, errorBody: null };
   } catch (e) {
     const blocked = e instanceof BlockedUrlError;
+    const tunnelStatus = blocked ? null : proxyTunnelStatus(e);
+    const proxyRefused = tunnelStatus !== null && isProxyRefusalStatus(tunnelStatus);
     return {
       ...base,
       finalUrl: current,
@@ -185,8 +223,15 @@ export async function fetchPage(url: string, kind: PageKind, timeoutMs = CRAWL_L
       html: null,
       bytes: null,
       loadTimeMs: null,
-      error: blocked ? e.message : networkErrorMessage(e, timeoutMs),
+      error: blocked
+        ? e.message
+        : proxyRefused
+          ? proxyRefusedMessage(tunnelStatus)
+          : tunnelStatus
+            ? "no se pudo conectar: el dominio no existe o el servidor no responde"
+            : networkErrorMessage(e, timeoutMs),
       networkError: !blocked,
+      ...(proxyRefused ? { proxyRefused: true } : {}),
       errorBody: null,
     };
   }
@@ -270,7 +315,9 @@ export async function crawlSite(startUrl: string): Promise<CrawlResult> {
     if (home.networkError) {
       const alt = startUrl.startsWith("https:") ? startUrl.replace(/^https:/, "http:") : startUrl.replace(/^http:/, "https:");
       const second = await fetchPage(alt, "home");
-      if (!second.networkError) home = second;
+      // A 5xx on the other scheme after a network failure is usually a proxy
+      // reporting the same unreachable host, not a real answer from the site.
+      if (!second.networkError && !(second.status !== null && second.status >= 500)) home = second;
     }
   }
 

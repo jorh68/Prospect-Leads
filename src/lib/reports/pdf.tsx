@@ -198,7 +198,7 @@ export function ReportPdf({ content }: { content: ReportContent }) {
           <Section n={next()} title="Sistemas que podríamos implementar">
             {content.systems.map((sys) => (
               <View key={sys.label} style={s.factRow} wrap={false}>
-                <Text style={[s.factLabel, { width: 150, color: C.ink, fontFamily: "Helvetica-Bold" }]}>{sys.label}</Text>
+                <Text style={[s.factLabel, { width: 160, flexShrink: 0, paddingRight: 12, color: C.ink, fontFamily: "Helvetica-Bold" }]}>{sys.label}</Text>
                 <View style={s.factValue}>
                   <Text>{sys.description}</Text>
                   <Text style={s.small}>Resuelve: {sys.addresses.join(" · ")}</Text>
